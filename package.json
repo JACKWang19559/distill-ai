@@ -18,6 +18,9 @@
     "rimraf": "^5.0.0",
     "typescript": "^5.4.0"
   },
+  "dependencies": {
+    "next": "16.2.9"
+  },
   "packageManager": "pnpm@9.0.0",
   "engines": {
     "node": ">=18.17.0"
