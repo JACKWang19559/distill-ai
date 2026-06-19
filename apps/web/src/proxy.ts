@@ -38,17 +38,26 @@ export async function proxy(request: NextRequest) {
   const { nextUrl } = request;
 
   // 使用 getToken 检查 JWT（不需要 Prisma，兼容 edge 运行时）
+  // NextAuth v5 使用 authjs.session-token 作为 cookie 名（生产环境带 __Secure- 前缀）
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
+    cookieName: "authjs.session-token",
   });
   const isLoggedIn = !!token;
+
+  // 调试日志：检查 cookie 是否存在
+  const sessionCookie =
+    request.cookies.get("__Secure-authjs.session-token")?.value ||
+    request.cookies.get("authjs.session-token")?.value;
 
   console.log("[Proxy]", {
     path: nextUrl.pathname,
     isLoggedIn,
     hasToken: !!token,
     hasSecret: !!process.env.NEXTAUTH_SECRET,
+    hasSessionCookie: !!sessionCookie,
+    cookieNames: Array.from(request.cookies.keys()),
   });
 
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
