@@ -1,0 +1,42 @@
+# Distill 媒体处理服务依赖
+# Python 3.10+ 需要
+
+# Web 框架
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# 视频下载（支持抖音/小红书等多平台）
+yt-dlp==2024.3.10
+
+# 音视频处理（需要系统安装 ffmpeg）
+ffmpeg-python==0.2.0
+
+# PDF 解析（需要系统安装 Java 11+）
+# 基础模式：本地确定性解析
+opendataloader-pdf==0.1.0
+# Hybrid 模式：复杂表格、扫描件 OCR、公式识别（可选）
+# 安装方式：pip install "opendataloader-pdf[hybrid]"
+
+# ASR 语音识别（本地 Whisper 兜底）
+# 注意：openai-whisper 依赖 torch，体积较大
+# 如仅使用云端 ASR，可注释此行
+openai-whisper==20231117
+
+# 网页解析（小红书内容提取）
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# 配置管理
+pydantic==2.6.1
+pydantic-settings==2.1.0
+
+# 日志
+loguru==0.7.2
+
+# HTTP 客户端（用于调用云端 ASR API）
+httpx==0.27.0
+
+# 工具库
+python-dotenv==1.0.1

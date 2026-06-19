@@ -1,0 +1,226 @@
+/**
+ * Python 媒体处理服务客户端。
+ *
+ * 封装对 services/media-processor 的 HTTP 调用，
+ * 提供 PDF 解析、抖音视频处理、小红书笔记处理 3 个函数。
+ */
+
+import { MEDIA_SERVICE_URL } from "@/lib/config";
+
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+/** PDF 解析结果 */
+export interface PdfExtractResult {
+  /** 提取的 Markdown 文本 */
+  markdown: string;
+  /** 页数 */
+  pageCount: number;
+  /** 输出格式 */
+  format: string;
+  /** 是否使用了 Hybrid 模式 */
+  usedHybrid: boolean;
+}
+
+/** 抖音视频处理结果 */
+export interface DouyinProcessResult {
+  /** ASR 转写文本 */
+  transcript: string;
+  /** 视频标题 */
+  title: string;
+  /** 作者昵称 */
+  author: string;
+  /** 视频时长（秒） */
+  duration: number;
+  /** 音频文件 URL（仅 extract_audio_only 时返回） */
+  audioUrl: string | null;
+}
+
+/** 小红书笔记处理结果 */
+export interface XiaohongshuProcessResult {
+  /** 笔记类型 */
+  noteType: "image" | "video";
+  /** 笔记标题 */
+  title: string;
+  /** 笔记正文 */
+  content: string;
+  /** 视频笔记的 ASR 转写文本（图文笔记为空） */
+  transcript: string;
+  /** 作者昵称 */
+  author: string;
+  /** 视频笔记的视频地址 */
+  videoUrl: string | null;
+  /** 标签列表 */
+  tags: string[];
+  /** IP 归属地 */
+  ipLocation: string;
+  /** 点赞数 */
+  likedCount: string;
+  /** 收藏数 */
+  collectedCount: string;
+  /** 评论数 */
+  commentCount: string;
+}
+
+// ============================================================================
+// 内部辅助
+// ============================================================================
+
+/**
+ * 带超时的 fetch 请求。
+ *
+ * @param url 请求 URL
+ * @param options fetch 选项
+ * @param timeoutMs 超时毫秒
+ * @throws Error 超时或 HTTP 非 2xx
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      // 尝试解析错误详情
+      let detail = response.statusText;
+      try {
+        const errorBody = await response.json();
+        detail = errorBody.detail ?? errorBody.message ?? detail;
+      } catch {
+        // JSON 解析失败，使用 statusText
+      }
+      throw new Error(`媒体服务错误 (HTTP ${response.status}): ${detail}`);
+    }
+
+    return response;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`媒体服务请求超时（${timeoutMs / 1000}秒）`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ============================================================================
+// 公开 API
+// ============================================================================
+
+/**
+ * PDF 解析（调用 Python /pdf/extract-from-path）。
+ *
+ * 使用服务端文件路径方式调用，避免二次上传。
+ *
+ * @param filePath PDF 文件的服务端绝对路径
+ * @param useHybrid 是否启用 Hybrid 模式（扫描件/复杂表格）
+ * @returns PDF 解析结果
+ */
+export async function extractPdf(
+  filePath: string,
+  useHybrid: boolean = false
+): Promise<PdfExtractResult> {
+  const formData = new FormData();
+  formData.append("file_path", filePath);
+  formData.append("use_hybrid", String(useHybrid));
+
+  const response = await fetchWithTimeout(
+    `${MEDIA_SERVICE_URL}/pdf/extract-from-path`,
+    { method: "POST", body: formData },
+    5 * 60 * 1000 // 5 分钟（大 PDF 解析慢）
+  );
+
+  const data = await response.json();
+  return {
+    markdown: data.markdown,
+    pageCount: data.page_count,
+    format: data.format,
+    usedHybrid: data.used_hybrid,
+  };
+}
+
+/**
+ * 抖音视频处理（调用 Python /media/douyin）。
+ *
+ * 完整流程：下载视频 → 分离音频 → ASR 转写。
+ *
+ * @param url 抖音视频分享链接
+ * @param cookie 可选 Cookie（反爬）
+ * @returns 抖音视频处理结果
+ */
+export async function processDouyinVideo(
+  url: string,
+  cookie?: string
+): Promise<DouyinProcessResult> {
+  const taskId = crypto.randomUUID();
+
+  const response = await fetchWithTimeout(
+    `${MEDIA_SERVICE_URL}/media/douyin`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, cookie, task_id: taskId }),
+    },
+    10 * 60 * 1000 // 10 分钟（下载 + ASR 耗时长）
+  );
+
+  const data = await response.json();
+  return {
+    transcript: data.transcript,
+    title: data.title,
+    author: data.author,
+    duration: data.duration,
+    audioUrl: data.audio_url,
+  };
+}
+
+/**
+ * 小红书笔记处理（调用 Python /media/xiaohongshu）。
+ *
+ * 图文笔记：直接返回文本内容。
+ * 视频笔记：提取内容 + 下载视频 + ASR 转写。
+ *
+ * @param url 小红书笔记链接
+ * @param cookie 可选 Cookie
+ * @returns 小红书笔记处理结果
+ */
+export async function processXiaohongshuNote(
+  url: string,
+  cookie?: string
+): Promise<XiaohongshuProcessResult> {
+  const taskId = crypto.randomUUID();
+
+  const response = await fetchWithTimeout(
+    `${MEDIA_SERVICE_URL}/media/xiaohongshu`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, cookie, task_id: taskId }),
+    },
+    10 * 60 * 1000 // 10 分钟
+  );
+
+  const data = await response.json();
+  return {
+    noteType: data.note_type,
+    title: data.title,
+    content: data.content,
+    transcript: data.transcript,
+    author: data.author,
+    videoUrl: data.video_url,
+    tags: data.tags,
+    ipLocation: data.ip_location,
+    likedCount: data.liked_count,
+    collectedCount: data.collected_count,
+    commentCount: data.comment_count,
+  };
+}

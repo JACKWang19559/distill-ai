@@ -1,0 +1,199 @@
+// ============================================================================
+// Distill AI 知识蒸馏站 - Prisma Schema
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// 认证相关模型（NextAuth.js + Prisma Adapter）
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String? // 邮箱密码登录
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  knowledge     Knowledge[]
+  tags          Tag[]
+  apiConfigs    ApiConfig[]
+  apiTokens     ApiToken[]
+  distillTasks  DistillTask[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================================
+// 业务模型
+// ============================================================================
+
+/// 知识条目
+model Knowledge {
+  id             String   @id @default(cuid())
+  userId         String
+  title          String
+  sourceType     String   // text | markdown | url | pdf | douyin | xiaohongshu
+  sourceUrl      String?
+  rawContent     String   @db.Text
+  distilledData  Json     // { summary, keyPoints, outline, suggestedTags }
+  status         String   @default("pending") // pending | processing | completed | failed
+  errorMessage   String?  @db.Text
+  mediaMeta      Json?    // 媒体元数据（作者、时长、标签等）
+  userNote       String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime? // 软删除
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags     KnowledgeTag[]
+  sources  KnowledgeConnection[] @relation("source")
+  targets  KnowledgeConnection[] @relation("target")
+  distillTasks DistillTask[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, sourceType])
+  @@index([userId, createdAt])
+}
+
+/// 标签
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledge KnowledgeTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+/// 知识-标签关联（多对多）
+model KnowledgeTag {
+  knowledgeId String
+  tagId       String
+
+  knowledge Knowledge @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([knowledgeId, tagId])
+  @@index([tagId])
+}
+
+/// 知识关联（图谱边）
+model KnowledgeConnection {
+  id        String   @id @default(cuid())
+  sourceId  String
+  targetId  String
+  weight    Float    @default(0) // 关联强度 0-1
+  reason    String?  // 关联原因
+  createdAt DateTime @default(now())
+
+  source Knowledge @relation("source", fields: [sourceId], references: [id], onDelete: Cascade)
+  target Knowledge @relation("target", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+/// AI 供应商 API 配置
+model ApiConfig {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String   // openai | anthropic | qwen | deepseek | zhipu | asr
+  name      String
+  apiKey    String   // AES-256-GCM 加密存储
+  model     String
+  baseUrl   String?
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, provider])
+}
+
+/// 浏览器插件 API Token（长期令牌，用于跨域认证）
+model ApiToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique // 随机生成的不可逆令牌
+  name      String?  // 令牌名称（如 "Chrome 扩展"）
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+  expiresAt DateTime? // null 表示永不过期
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// 蒸馏任务
+model DistillTask {
+  id           String   @id @default(cuid())
+  userId       String
+  knowledgeId  String?
+  status       String   @default("pending") // pending | processing | completed | failed
+  errorMessage String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledge Knowledge? @relation(fields: [knowledgeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([knowledgeId])
+}
