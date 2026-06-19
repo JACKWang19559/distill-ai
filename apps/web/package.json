@@ -12,7 +12,6 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate",
     "vercel-build": "prisma generate && next build"
   },
   "dependencies": {
@@ -48,6 +47,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss-import": "^16.1.1",
+    "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
