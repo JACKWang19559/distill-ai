@@ -44,6 +44,13 @@ export async function proxy(request: NextRequest) {
   });
   const isLoggedIn = !!token;
 
+  console.log("[Proxy]", {
+    path: nextUrl.pathname,
+    isLoggedIn,
+    hasToken: !!token,
+    hasSecret: !!process.env.NEXTAUTH_SECRET,
+  });
+
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
     nextUrl.pathname.startsWith(route)
   );
