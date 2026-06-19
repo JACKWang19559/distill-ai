@@ -57,7 +57,6 @@ export async function proxy(request: NextRequest) {
     hasToken: !!token,
     hasSecret: !!process.env.NEXTAUTH_SECRET,
     hasSessionCookie: !!sessionCookie,
-    cookieNames: Array.from(request.cookies.keys()),
   });
 
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
