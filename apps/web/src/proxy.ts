@@ -36,12 +36,16 @@ const AUTH_ROUTES = ["/login", "/register"];
  */
 export async function proxy(request: NextRequest) {
   const { nextUrl } = request;
+  const secureCookie =
+    nextUrl.protocol === "https:" ||
+    request.headers.get("x-forwarded-proto") === "https";
 
   // 使用 getToken 检查 JWT（不需要 Prisma，兼容 edge 运行时）。
-  // 不手动指定 cookieName，让 Auth.js 根据 http/https 自动选择本地或 __Secure- cookie。
+  // 不手动指定 cookieName，让 Auth.js 根据 secureCookie 同步选择 cookie 名和 JWT salt。
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secureCookie,
   });
   const isLoggedIn = !!token;
 
