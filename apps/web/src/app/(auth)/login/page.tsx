@@ -23,11 +23,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+/**
+ * 只允许站内、非认证页作为登录后的跳转目标，避免线上回调 URL 造成循环跳转。
+ */
+function normalizeCallbackUrl(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  if (value.startsWith("/login") || value.startsWith("/register")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
 /** 登录表单（使用 useSearchParams，需包裹在 Suspense 中） */
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const callbackUrl = normalizeCallbackUrl(searchParams.get("callbackUrl"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

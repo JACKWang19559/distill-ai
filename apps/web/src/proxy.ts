@@ -37,12 +37,11 @@ const AUTH_ROUTES = ["/login", "/register"];
 export async function proxy(request: NextRequest) {
   const { nextUrl } = request;
 
-  // 使用 getToken 检查 JWT（不需要 Prisma，兼容 edge 运行时）
-  // NextAuth v5 使用 authjs.session-token 作为 cookie 名（生产环境带 __Secure- 前缀）
+  // 使用 getToken 检查 JWT（不需要 Prisma，兼容 edge 运行时）。
+  // 不手动指定 cookieName，让 Auth.js 根据 http/https 自动选择本地或 __Secure- cookie。
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-    cookieName: "authjs.session-token",
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   });
   const isLoggedIn = !!token;
 
@@ -55,7 +54,7 @@ export async function proxy(request: NextRequest) {
     path: nextUrl.pathname,
     isLoggedIn,
     hasToken: !!token,
-    hasSecret: !!process.env.NEXTAUTH_SECRET,
+    hasSecret: !!(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET),
     hasSessionCookie: !!sessionCookie,
   });
 
@@ -66,7 +65,12 @@ export async function proxy(request: NextRequest) {
 
   // 未登录访问受保护路由 → 重定向到登录页
   if (isProtectedRoute && !isLoggedIn) {
-    return NextResponse.redirect(new URL("/login", nextUrl));
+    const loginUrl = new URL("/login", nextUrl);
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      `${nextUrl.pathname}${nextUrl.search}`
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   // 已登录访问认证页面 → 重定向到 dashboard
