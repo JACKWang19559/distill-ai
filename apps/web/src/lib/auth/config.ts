@@ -55,10 +55,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
        * @returns 用户对象（含 id/email/name）或 null（登录失败）
        */
       async authorize(credentials) {
-        console.log("[Auth] authorize 被调用", { email: credentials?.email });
-
         if (!credentials?.email || !credentials?.password) {
-          console.log("[Auth] 缺少邮箱或密码");
           return null;
         }
 
@@ -71,19 +68,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user || !user.password) {
-          console.log("[Auth] 用户不存在或无密码", { email, found: !!user });
           return null;
         }
 
         // 校验密码
         const isValid = await bcrypt.compare(password, user.password);
-        console.log("[Auth] 密码校验结果", { email, isValid });
-
         if (!isValid) {
           return null;
         }
 
-        console.log("[Auth] 登录成功", { id: user.id, email: user.email });
         return {
           id: user.id,
           email: user.email,
@@ -98,7 +91,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * JWT 回调：将用户 id 注入 token。
      */
     async jwt({ token, user }) {
-      console.log("[Auth] jwt 回调", { hasUser: !!user, tokenId: token.id });
       if (user) {
         token.id = user.id;
       }
@@ -108,7 +100,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * Session 回调：将 token.id 注入 session.user.id。
      */
     async session({ session, token }) {
-      console.log("[Auth] session 回调", { tokenId: token.id, sessionUser: !!session.user });
       if (session.user && token.id) {
         session.user.id = token.id as string;
       }
