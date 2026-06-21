@@ -28,15 +28,19 @@ services:
         value: false
       - key: LOG_LEVEL
         value: INFO
-      # ASR 配置（默认使用云端 OpenAI Whisper API）
+      # ASR 配置（默认使用 Groq 免费 Whisper API，兼容 OpenAI 协议）
+      # Groq 免费额度：每天 288 分钟音频，足够日常使用
+      # 申请地址：https://console.groq.com/keys
       - key: ASR_PROVIDER
         value: cloud
       - key: CLOUD_ASR_PROVIDER
-        value: openai
+        value: openai  # Groq 兼容 OpenAI 协议
       - key: CLOUD_ASR_API_KEY
-        sync: false  # 在 Render 控制台手动填写（敏感信息）
+        sync: false  # 在 Render 控制台手动填写（Groq 或 OpenAI Key）
       - key: CLOUD_ASR_API_URL
-        value: ""  # 留空使用默认 OpenAI 端点
+        value: https://api.groq.com/openai/v1/audio/transcriptions
+      - key: CLOUD_ASR_MODEL
+        value: whisper-large-v3  # Groq 免费 Whisper 模型
       # PDF 解析配置
       - key: PDF_HYBRID_MODE
         value: false

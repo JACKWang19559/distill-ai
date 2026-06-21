@@ -68,13 +68,29 @@ class Settings(BaseSettings):
 
     # 云端 ASR 配置（当 ASR_PROVIDER=cloud 时生效）
     CLOUD_ASR_PROVIDER: Literal["tongyi", "xunfei", "openai"] = "openai"
-    """云端 ASR 供应商。"""
+    """云端 ASR 供应商。
+
+    支持：
+    - openai: OpenAI Whisper API（默认）
+    - 兼容 OpenAI 协议的服务（如 Groq、DeepInfra）只需设置 CLOUD_ASR_API_URL
+    """
 
     CLOUD_ASR_API_KEY: str = ""
     """云端 ASR API Key。"""
 
     CLOUD_ASR_API_URL: str = ""
-    """云端 ASR API 地址（可选，部分供应商需要）。"""
+    """云端 ASR API 地址（可选）。
+
+    留空使用 OpenAI 默认端点。
+    Groq 用户填：https://api.groq.com/openai/v1/audio/transcriptions
+    """
+
+    CLOUD_ASR_MODEL: str = "whisper-1"
+    """ASR 模型名称。
+
+    - OpenAI: whisper-1（默认）
+    - Groq: whisper-large-v3（推荐，免费且有额度）
+    """
 
     # PDF 解析配置
     PDF_HYBRID_MODE: bool = False

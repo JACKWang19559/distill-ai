@@ -95,21 +95,24 @@ class CloudASRProvider(ASRProvider):
     """云端 ASR 供应商。
 
     支持通义听悟、讯飞、OpenAI Whisper API 等云端服务。
+    也兼容 OpenAI 协议的第三方服务（如 Groq、DeepInfra）。
     精度通常高于本地模型，但需要网络和 API Key。
     """
 
-    def __init__(self, provider: str, api_key: str, api_url: str = ""):
+    def __init__(self, provider: str, api_key: str, api_url: str = "", model: str = ""):
         """初始化云端 ASR 客户端。
 
         Args:
             provider: 供应商名称（tongyi/xunfei/openai）
             api_key: API Key
-            api_url: API 地址（部分供应商需要）
+            api_url: API 地址（部分供应商需要，如 Groq）
+            model: 模型名称（如 whisper-1 / whisper-large-v3）
         """
         self.provider = provider
         self.api_key = api_key
         self.api_url = api_url
-        logger.info("初始化云端 ASR 供应商: %s", provider)
+        self.model = model or "whisper-1"
+        logger.info("初始化云端 ASR 供应商: %s (model: %s)", provider, self.model)
 
     def transcribe(self, audio_path: Path) -> str:
         """调用云端 ASR API 转写音频。
@@ -138,6 +141,9 @@ class CloudASRProvider(ASRProvider):
     def _transcribe_with_openai(self, audio_path: Path) -> str:
         """使用 OpenAI Whisper API 转写。
 
+        兼容 OpenAI 协议的第三方服务（如 Groq、DeepInfra），
+        只需在初始化时设置 api_url 和 model。
+
         Args:
             audio_path: 音频文件路径
 
@@ -146,15 +152,15 @@ class CloudASRProvider(ASRProvider):
         """
         import httpx
 
-        # OpenAI Whisper API 端点
+        # OpenAI Whisper API 端点（可被 api_url 覆盖，如 Groq）
         api_url = self.api_url or "https://api.openai.com/v1/audio/transcriptions"
 
-        logger.info("调用 OpenAI Whisper API: %s", audio_path)
+        logger.info("调用 OpenAI 兼容 ASR API: %s (model: %s)", audio_path, self.model)
 
         with open(audio_path, "rb") as audio_file:
             files = {"file": (audio_path.name, audio_file, "audio/wav")}
             data = {
-                "model": "whisper-1",
+                "model": self.model,
                 "language": "zh",
                 "response_format": "text",
             }
@@ -167,7 +173,7 @@ class CloudASRProvider(ASRProvider):
                 response.raise_for_status()
 
                 text = response.text.strip()
-                logger.info("OpenAI Whisper API 转写完成, 文本长度: %d", len(text))
+                logger.info("ASR 转写完成, 文本长度: %d", len(text))
                 return text
 
     def _transcribe_with_tongyi(self, audio_path: Path) -> str:
@@ -253,6 +259,7 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
                 provider=settings.CLOUD_ASR_PROVIDER,
                 api_key=settings.CLOUD_ASR_API_KEY,
                 api_url=settings.CLOUD_ASR_API_URL,
+                model=settings.CLOUD_ASR_MODEL,
             )
     elif provider == "cloud":
         if not settings.CLOUD_ASR_API_KEY:
@@ -267,6 +274,7 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
             provider=settings.CLOUD_ASR_PROVIDER,
             api_key=settings.CLOUD_ASR_API_KEY,
             api_url=settings.CLOUD_ASR_API_URL,
+            model=settings.CLOUD_ASR_MODEL,
         )
     else:
         raise ValueError(f"不支持的 ASR 供应商: {provider}")
