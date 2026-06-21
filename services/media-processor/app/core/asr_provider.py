@@ -219,6 +219,10 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
     1. 显式传入的 provider 参数
     2. 配置文件中的 ASR_PROVIDER
 
+    降级策略：
+    - 若选择 whisper-local 但 openai-whisper 未安装，自动降级为云端 ASR
+    - 若云端 ASR 未配置 API Key，抛出明确错误
+
     Args:
         provider: 显式指定的供应商（可选）
 
@@ -226,16 +230,39 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
         ASRProvider 实例
 
     Raises:
-        ValueError: 不支持的供应商
+        ValueError: 不支持的供应商，或所有供应商均不可用
     """
     provider = provider or settings.ASR_PROVIDER
 
     if provider == "whisper-local":
-        return WhisperLocalProvider(model_size=settings.WHISPER_MODEL_SIZE)
+        try:
+            import whisper  # noqa: F401
+
+            return WhisperLocalProvider(model_size=settings.WHISPER_MODEL_SIZE)
+        except ImportError:
+            logger.warning(
+                "openai-whisper 未安装，尝试降级为云端 ASR。"
+                "如需本地 ASR，请 pip install openai-whisper"
+            )
+            if not settings.CLOUD_ASR_API_KEY:
+                raise ValueError(
+                    "本地 Whisper 未安装且云端 ASR 未配置 API Key。"
+                    "请设置 CLOUD_ASR_API_KEY 环境变量，或安装 openai-whisper"
+                )
+            return CloudASRProvider(
+                provider=settings.CLOUD_ASR_PROVIDER,
+                api_key=settings.CLOUD_ASR_API_KEY,
+                api_url=settings.CLOUD_ASR_API_URL,
+            )
     elif provider == "cloud":
         if not settings.CLOUD_ASR_API_KEY:
             logger.warning("云端 ASR 未配置 API Key，降级为本地 Whisper")
-            return WhisperLocalProvider(model_size=settings.WHISPER_MODEL_SIZE)
+            try:
+                return WhisperLocalProvider(model_size=settings.WHISPER_MODEL_SIZE)
+            except ImportError as e:
+                raise ValueError(
+                    "云端 ASR 未配置 API Key 且本地 Whisper 未安装"
+                ) from e
         return CloudASRProvider(
             provider=settings.CLOUD_ASR_PROVIDER,
             api_key=settings.CLOUD_ASR_API_KEY,

@@ -1,0 +1,55 @@
+# Render.com 部署配置
+# 文档: https://render.com/docs/blueprint-spec
+#
+# 使用方式：
+# 1. 在 Render.com 控制台选择 "New > Blueprint"
+# 2. 选择本仓库（需已推送到 GitHub）
+# 3. Render 会自动读取此文件进行部署
+
+services:
+  # ============================================================================
+  # Distill 媒体处理服务
+  # ============================================================================
+  - type: web
+    name: distill-media-processor
+    runtime: docker
+    plan: free  # 免费计划（512MB RAM，15 分钟无活动休眠）
+    region: singapore  # 新加坡区域（离中国最近）
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true  # 推送到 main 分支自动部署
+    # 环境变量（在 Render 控制台填写敏感信息）
+    envVars:
+      # 服务配置
+      - key: APP_NAME
+        value: distill-media-processor
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      # ASR 配置（默认使用云端 OpenAI Whisper API）
+      - key: ASR_PROVIDER
+        value: cloud
+      - key: CLOUD_ASR_PROVIDER
+        value: openai
+      - key: CLOUD_ASR_API_KEY
+        sync: false  # 在 Render 控制台手动填写（敏感信息）
+      - key: CLOUD_ASR_API_URL
+        value: ""  # 留空使用默认 OpenAI 端点
+      # PDF 解析配置
+      - key: PDF_HYBRID_MODE
+        value: false
+      # 下载配置
+      - key: MAX_VIDEO_DURATION
+        value: "1800"
+      - key: DOWNLOAD_TIMEOUT
+        value: "120"
+      # 抖音/小红书 Cookie（可选，在控制台填写）
+      - key: DOUYIN_COOKIE
+        sync: false
+      - key: XIAOHONGSHU_COOKIE
+        sync: false
+      # 临时文件清理
+      - key: TEMP_FILE_TTL
+        value: "3600"

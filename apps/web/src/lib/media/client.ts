@@ -117,11 +117,12 @@ async function fetchWithTimeout(
 // ============================================================================
 
 /**
- * PDF 解析（调用 Python /pdf/extract-from-path）。
+ * PDF 解析（调用 Python /pdf/extract）。
  *
- * 使用服务端文件路径方式调用，避免二次上传。
+ * 分离部署后文件系统不共享，改为上传文件流方式。
+ * Next.js 读取本地文件 → 以 multipart/form-data 上传到媒体服务。
  *
- * @param filePath PDF 文件的服务端绝对路径
+ * @param filePath PDF 文件的服务端绝对路径（Next.js 端可访问）
  * @param useHybrid 是否启用 Hybrid 模式（扫描件/复杂表格）
  * @returns PDF 解析结果
  */
@@ -129,12 +130,20 @@ export async function extractPdf(
   filePath: string,
   useHybrid: boolean = false
 ): Promise<PdfExtractResult> {
+  // 读取文件并构造上传请求
+  const fs = await import("fs/promises");
+  const path = await import("path");
+
+  const fileBuffer = await fs.readFile(filePath);
+  const fileName = path.basename(filePath);
+
   const formData = new FormData();
-  formData.append("file_path", filePath);
+  const blob = new Blob([fileBuffer], { type: "application/pdf" });
+  formData.append("file", blob, fileName);
   formData.append("use_hybrid", String(useHybrid));
 
   const response = await fetchWithTimeout(
-    `${MEDIA_SERVICE_URL}/pdf/extract-from-path`,
+    `${MEDIA_SERVICE_URL}/pdf/extract`,
     { method: "POST", body: formData },
     5 * 60 * 1000 // 5 分钟（大 PDF 解析慢）
   );

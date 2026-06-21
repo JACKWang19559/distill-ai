@@ -2,8 +2,14 @@
 
 使用 pydantic-settings 从环境变量加载配置，
 支持 .env 文件和系统环境变量两种方式。
+
+部署说明：
+- 本地开发：使用 .env 文件或默认值
+- Render.com：通过环境变量注入配置（PORT 由 Render 自动注入）
+- Vercel：不适用（此服务需独立部署，参见 DEPLOY_MEDIA_SERVICE.md）
 """
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -31,17 +37,19 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     """监听地址。"""
 
-    PORT: int = 8001
-    """监听端口。"""
+    # PORT 优先从环境变量读取（Render.com 会注入 PORT 环境变量）
+    PORT: int = int(os.environ.get("PORT", "8001"))
+    """监听端口。Render.com 会自动注入 PORT 环境变量。"""
 
     DEBUG: bool = False
     """是否开启调试模式。"""
 
     # 临时文件目录
-    TEMP_DIR: str = str(Path.cwd() / "tmp")
+    # Render.com 容器中 /tmp 可写，其他目录只读
+    TEMP_DIR: str = str(Path(os.environ.get("RENDER_TEMP_DIR", "/tmp/distill")))
     """临时文件存放目录（视频、音频、PDF 中间产物）。"""
 
-    UPLOAD_DIR: str = str(Path.cwd() / "uploads")
+    UPLOAD_DIR: str = str(Path(os.environ.get("RENDER_UPLOAD_DIR", "/tmp/distill/uploads")))
     """上传文件存放目录。"""
 
     # 文件保留时长（秒），超时后清理
@@ -49,8 +57,11 @@ class Settings(BaseSettings):
     """临时文件保留时长，默认 1 小时。"""
 
     # ASR 配置
-    ASR_PROVIDER: Literal["whisper-local", "cloud"] = "whisper-local"
-    """ASR 供应商：whisper-local（本地兜底）或 cloud（云端 API）。"""
+    ASR_PROVIDER: Literal["whisper-local", "cloud"] = "cloud"
+    """ASR 供应商：whisper-local（本地兜底）或 cloud（云端 API）。
+
+    生产环境默认使用 cloud，避免安装 openai-whisper（~2GB）。
+    """
 
     WHISPER_MODEL_SIZE: Literal["tiny", "base", "small", "medium", "large"] = "base"
     """本地 Whisper 模型大小，base 适合中文且速度较快。"""

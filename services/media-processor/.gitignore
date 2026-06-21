@@ -44,3 +44,14 @@ htmlcov/
 # 类型检查
 .mypy_cache/
 .ruff_cache/
+
+# 构建产物
+install/
+
+# 模型权重（Whisper 模型文件，体积大）
+*.pt
+*.bin
+*.onnx
+
+# Docker 构建产物
+Dockerfile.bak

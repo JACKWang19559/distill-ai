@@ -1,5 +1,10 @@
 # Distill 媒体处理服务依赖
 # Python 3.10+ 需要
+#
+# 部署说明：
+# - 本地开发：可取消注释 openai-whisper 启用本地 ASR
+# - 生产部署（Render/Railway）：保持注释，使用云端 ASR API
+#   原因：openai-whisper 依赖 torch（~2GB），会导致 Docker 镜像过大、构建超时
 
 # Web 框架
 fastapi==0.110.0
@@ -18,10 +23,13 @@ opendataloader-pdf==0.1.0
 # Hybrid 模式：复杂表格、扫描件 OCR、公式识别（可选）
 # 安装方式：pip install "opendataloader-pdf[hybrid]"
 
+# PDF 页数读取（轻量级，无额外依赖）
+pypdf==4.0.1
+
 # ASR 语音识别（本地 Whisper 兜底）
-# 注意：openai-whisper 依赖 torch，体积较大
-# 如仅使用云端 ASR，可注释此行
-openai-whisper==20231117
+# 注意：openai-whisper 依赖 torch，体积较大（~2GB）
+# 生产部署时注释此行，改用云端 ASR API（CLOUD_ASR_PROVIDER=openai）
+# openai-whisper==20231117
 
 # 网页解析（小红书内容提取）
 requests==2.31.0

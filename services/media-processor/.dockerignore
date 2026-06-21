@@ -1,0 +1,61 @@
+# Docker 构建忽略文件
+# 减少构建上下文体积，加速构建
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# 文档
+README.md
+*.md
+docs/
+
+# 测试
+tests/
+test_*.py
+
+# 临时文件
+tmp/
+uploads/
+*.log
+*.tmp
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# 操作系统
+.DS_Store
+Thumbs.db
