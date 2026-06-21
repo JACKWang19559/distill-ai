@@ -19,7 +19,7 @@ ffmpeg-python==0.2.0
 
 # PDF 解析（需要系统安装 Java 11+）
 # 基础模式：本地确定性解析
-opendataloader-pdf==0.1.0
+opendataloader-pdf==2.4.7
 # Hybrid 模式：复杂表格、扫描件 OCR、公式识别（可选）
 # 安装方式：pip install "opendataloader-pdf[hybrid]"
 
