@@ -71,15 +71,18 @@ export function LinkInput({
       {showCookie && onCookieChange && (
         <div className="space-y-2">
           <Label htmlFor="cookie" className="text-xs text-gray-500">
-            Cookie
+            Cookie（抖音/小红书反爬必需）
           </Label>
           <Textarea
             id="cookie"
             value={cookie}
             onChange={(e) => onCookieChange(e.target.value)}
-            placeholder="粘贴浏览器 Cookie（可选）"
+            placeholder="粘贴浏览器 Cookie"
             className="min-h-[80px] text-xs"
           />
+          <p className="text-xs text-muted-foreground">
+            获取方法：在浏览器中打开抖音/小红书并登录，按 F12 打开开发者工具 → Network → 刷新页面 → 点击任意请求 → 复制 Request Headers 中的 Cookie 值粘贴到此处。
+          </p>
         </div>
       )}
     </div>
