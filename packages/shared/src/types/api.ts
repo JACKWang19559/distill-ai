@@ -69,7 +69,7 @@ export type AIProviderType =
   | "minimax";
 
 /** ASR 供应商类型 */
-export type AsrProviderType = "groq" | "openai";
+export type AsrProviderType = "siliconflow" | "groq" | "openai";
 
 /** API 配置类型 */
 export type ApiConfigType = "llm" | "asr";

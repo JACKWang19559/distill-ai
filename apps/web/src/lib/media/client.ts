@@ -13,7 +13,7 @@ import { MEDIA_SERVICE_URL } from "@/lib/config";
 
 /** ASR 凭证（从用户配置读取，通过 header 传给媒体服务） */
 export interface AsrCredentials {
-  /** ASR 供应商（groq/openai） */
+  /** ASR 供应商（siliconflow/groq/openai） */
   provider: string;
   /** API Key（已解密） */
   apiKey: string;

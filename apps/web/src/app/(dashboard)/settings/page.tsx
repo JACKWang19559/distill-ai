@@ -64,8 +64,16 @@ const LLM_PROVIDER_OPTIONS = [
 /** ASR 供应商选项 */
 const ASR_PROVIDER_OPTIONS = [
   {
+    value: "siliconflow",
+    label: "硅基流动 SiliconFlow（推荐，国内可访问，免费额度）",
+    defaultModel: "FunAudioLLM/SenseVoiceSmall",
+    defaultBaseUrl: "https://api.siliconflow.cn/v1/audio/transcriptions",
+    apiKeyHint: "sk-...",
+    docsUrl: "https://cloud.siliconflow.cn/account/ak",
+  },
+  {
     value: "groq",
-    label: "Groq（推荐，免费 288 分钟/天）",
+    label: "Groq（免费 288 分钟/天，需科学上网）",
     defaultModel: "whisper-large-v3",
     defaultBaseUrl: "https://api.groq.com/openai/v1/audio/transcriptions",
     apiKeyHint: "gsk_...",
@@ -108,11 +116,11 @@ export default function SettingsPage() {
     isActive: true,
   });
   const [asrForm, setAsrForm] = useState({
-    provider: "groq",
+    provider: "siliconflow",
     name: "",
     apiKey: "",
-    model: "whisper-large-v3",
-    baseUrl: "https://api.groq.com/openai/v1/audio/transcriptions",
+    model: "FunAudioLLM/SenseVoiceSmall",
+    baseUrl: "https://api.siliconflow.cn/v1/audio/transcriptions",
     isActive: true,
   });
 
@@ -576,14 +584,20 @@ export default function SettingsPage() {
                   type="password"
                   value={asrForm.apiKey}
                   onChange={(e) => setAsrForm({ ...asrForm, apiKey: e.target.value })}
-                  placeholder={asrForm.provider === "groq" ? "gsk_..." : "sk-..."}
+                  placeholder={
+                    ASR_PROVIDER_OPTIONS.find((p) => p.value === asrForm.provider)?.apiKeyHint ?? "sk-..."
+                  }
                   required
                 />
-                {asrForm.provider === "groq" && (
-                  <p className="text-xs text-muted-foreground">
-                    免费 Key 申请：https://console.groq.com/keys
-                  </p>
-                )}
+                {(() => {
+                  const opt = ASR_PROVIDER_OPTIONS.find((p) => p.value === asrForm.provider);
+                  if (!opt?.docsUrl) return null;
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      Key 申请地址：<a href={opt.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{opt.docsUrl}</a>
+                    </p>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

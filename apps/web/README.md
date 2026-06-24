@@ -15,7 +15,7 @@
 | **知识库** | 全文检索、标签筛选、卡片/列表双视图、详情编辑 |
 | **知识图谱** | 可视化网络呈现知识点关联，支持拖拽、缩放、节点筛选 |
 | **多 AI 供应商** | OpenAI / Anthropic / 通义千问 / DeepSeek / 智谱 AI / Minimax，用户可自由切换 |
-| **ASR 语音识别** | 用户自带 Key 支持 Groq（免费 288 分钟/天）/ OpenAI Whisper，用于抖音/小红书视频蒸馏 |
+| **ASR 语音识别** | 用户自带 Key 支持硅基流动（推荐，国内可访问）/ Groq / OpenAI Whisper，用于抖音/小红书视频蒸馏 |
 | **浏览器插件** | Chrome/Edge 一键蒸馏当前网页，侧边栏实时查看进度与结果 |
 
 ---
@@ -39,7 +39,7 @@
 - **框架**：FastAPI + Uvicorn
 - **视频下载**：yt-dlp（抖音 / 小红书多平台）
 - **音频处理**：ffmpeg-python（需系统 ffmpeg）
-- **ASR**：OpenAI Whisper（本地兜底）+ 云端 API
+- **ASR**：硅基流动 SenseVoiceSmall（推荐）/ Groq Whisper / OpenAI Whisper（用户自带 Key，通过 header 传递）
 - **PDF**：opendataloader-pdf（复杂表格 / OCR / 公式）
 
 ### 共享包（`packages/shared`）
@@ -164,10 +164,11 @@ pnpm --filter @distill/extension build
 ### 使用流程
 
 1. 在 Web 端注册账号并登录
-2. 在「设置 → API 配置」中添加至少一个 AI 供应商的 API Key
-3. 打开任意网页，点击浏览器工具栏的 Distill 图标
-4. 侧边栏点击「一键蒸馏」，等待 AI 处理完成
-5. 在 Web 端「知识库」查看蒸馏结果，在「图谱」查看关联
+2. 在「设置 → AI 供应商配置」中添加至少一个 LLM API Key（支持 OpenAI / Anthropic / Qwen / DeepSeek / 智谱 / Minimax）
+3. 如需蒸馏抖音/小红书视频，在「设置 → ASR 语音识别配置」中添加 ASR API Key（推荐硅基流动，国内可访问，免费额度）
+4. 打开任意网页，点击浏览器工具栏的 Distill 图标
+5. 侧边栏点击「一键蒸馏」，等待 AI 处理完成
+6. 在 Web 端「知识库」查看蒸馏结果，在「图谱」查看关联
 
 ---
 
@@ -182,7 +183,10 @@ pnpm --filter @distill/extension build
 | `GITHUB_ID` / `GITHUB_SECRET` | GitHub OAuth 凭证（可选） | - |
 | `MEDIA_SERVICE_URL` | 媒体处理服务地址 | `http://localhost:8001` |
 
-> AI 供应商 API Key 在应用内「设置 → API 配置」页面管理，加密存储于数据库。
+> AI 供应商 API Key 与 ASR API Key 均在应用内「设置」页面管理，使用 AES-256-GCM 加密存储于数据库。
+>
+> - **LLM 配置**：设置 → AI 供应商配置（OpenAI / Anthropic / Qwen / DeepSeek / 智谱 / Minimax）
+> - **ASR 配置**：设置 → ASR 语音识别配置（硅基流动 / Groq / OpenAI Whisper），用于抖音/小红书视频蒸馏
 
 ---
 
@@ -231,7 +235,8 @@ node scripts/seed-demo.mjs    # 填充演示账号、知识、标签、关联
 - **认证**：NextAuth v5 + Credentials（bcrypt 加密）+ GitHub OAuth
 - **授权**：所有 API 路由通过 `requireAuth` 中间件校验，数据按 `userId` 隔离
 - **限流**：注册 3/min、扩展登录 5/min、蒸馏 10/min、上传 5/min（滑动窗口）
-- **加密**：AI API Key 使用 AES-256 加密存储
+- **加密**：AI API Key 与 ASR API Key 使用 AES-256-GCM 加密存储
+- **ASR 凭证传递**：用户 ASR Key 通过 HTTP header 传递给媒体服务，不在服务端持久化明文
 - **XSS 防护**：搜索结果高亮前先 `escapeHtml`，再 `dangerouslySetInnerHTML`
 - **SQL 注入**：Prisma 参数化查询
 
@@ -242,7 +247,8 @@ node scripts/seed-demo.mjs    # 填充演示账号、知识、标签、关联
 - **Monorepo**：pnpm workspace + turbo，统一依赖与构建
 - **代码分割**：知识图谱（@xyflow/react + d3-force）通过 `next/dynamic` 懒加载
 - **流式蒸馏**：Server-Sent Events 实时推送任务状态，替代轮询
-- **多 AI 供应商**：工厂模式 + 统一接口，运行时切换
+- **多 AI 供应商**：工厂模式 + 统一接口，运行时切换（含 Minimax）
+- **用户自带 Key**：LLM 与 ASR 配置分离，用户可在设置页管理各自的 API Key
 - **Docker 化**：多阶段构建 + standalone 输出，镜像体积优化
 - **数据库索引**：针对 `userId`、`userId+status`、`userId+createdAt` 等高频查询路径建立复合索引
 

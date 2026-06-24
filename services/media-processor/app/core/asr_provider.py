@@ -129,7 +129,7 @@ class CloudASRProvider(ASRProvider):
             ValueError: 不支持的供应商
             Exception: API 调用失败
         """
-        if self.provider == "openai":
+        if self.provider in ("openai", "groq", "siliconflow"):
             return self._transcribe_with_openai(audio_path)
         elif self.provider == "tongyi":
             return self._transcribe_with_tongyi(audio_path)
@@ -141,7 +141,7 @@ class CloudASRProvider(ASRProvider):
     def _transcribe_with_openai(self, audio_path: Path) -> str:
         """使用 OpenAI Whisper API 转写。
 
-        兼容 OpenAI 协议的第三方服务（如 Groq、DeepInfra），
+        兼容 OpenAI 协议的第三方服务（如 Groq、DeepInfra、硅基流动），
         只需在初始化时设置 api_url 和 model。
 
         Args:
@@ -152,18 +152,21 @@ class CloudASRProvider(ASRProvider):
         """
         import httpx
 
-        # OpenAI Whisper API 端点（可被 api_url 覆盖，如 Groq）
+        # OpenAI Whisper API 端点（可被 api_url 覆盖，如 Groq / 硅基流动）
         api_url = self.api_url or "https://api.openai.com/v1/audio/transcriptions"
 
         logger.info("调用 OpenAI 兼容 ASR API: %s (model: %s)", audio_path, self.model)
 
         with open(audio_path, "rb") as audio_file:
             files = {"file": (audio_path.name, audio_file, "audio/wav")}
-            data = {
-                "model": self.model,
-                "language": "zh",
-                "response_format": "text",
-            }
+            data: dict[str, Any] = {"model": self.model}
+
+            # 硅基流动 API 仅接受 file 和 model 参数，不支持 language/response_format
+            # Groq 和 OpenAI 支持这些参数
+            if self.provider != "siliconflow":
+                data["language"] = "zh"
+                data["response_format"] = "text"
+
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
             }
@@ -172,7 +175,13 @@ class CloudASRProvider(ASRProvider):
                 response = client.post(api_url, files=files, data=data, headers=headers)
                 response.raise_for_status()
 
-                text = response.text.strip()
+                # 硅基流动返回 JSON {"text": "..."}，OpenAI/Groq 在 response_format=text 时返回纯文本
+                if self.provider == "siliconflow":
+                    result = response.json()
+                    text = result.get("text", "").strip()
+                else:
+                    text = response.text.strip()
+
                 logger.info("ASR 转写完成, 文本长度: %d", len(text))
                 return text
 

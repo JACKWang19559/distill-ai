@@ -22,12 +22,14 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   zhipu: "glm-4",
   minimax: "MiniMax-Text-01",
   // ASR 供应商
+  siliconflow: "FunAudioLLM/SenseVoiceSmall",
   groq: "whisper-large-v3",
   openai_asr: "whisper-1",
 };
 
 /** ASR 供应商默认 API URL */
 const ASR_DEFAULT_API_URLS: Record<string, string> = {
+  siliconflow: "https://api.siliconflow.cn/v1/audio/transcriptions",
   groq: "https://api.groq.com/openai/v1/audio/transcriptions",
   openai: "https://api.openai.com/v1/audio/transcriptions",
 };
