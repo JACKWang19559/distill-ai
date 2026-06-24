@@ -78,7 +78,7 @@ async def process_xiaohongshu_note(
                 )
 
                 # 分离音频
-                audio_path = task_dir / "audio.wav"
+                audio_path = task_dir / "audio.mp3"
                 extract_audio(Path(video_info["file_path"]), audio_path)
 
                 # ASR 识别（优先使用 header 凭证）

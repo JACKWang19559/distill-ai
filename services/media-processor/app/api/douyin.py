@@ -74,7 +74,7 @@ async def process_douyin_video(request: DouyinRequest, req: Request) -> DouyinRe
 
         # 步骤 2：分离音频
         logger.info("[%s] 开始分离音频", request.task_id)
-        audio_path = task_dir / "audio.wav"
+        audio_path = task_dir / "audio.mp3"
         extract_audio(Path(video_info["file_path"]), audio_path)
 
         # 如果仅提取音频，不进行 ASR

@@ -1,7 +1,7 @@
 """音频分离模块。
 
 使用 ffmpeg 从视频文件中分离音频轨道，
-输出 ASR 友好的 WAV 格式（16kHz 单声道 16-bit PCM）。
+输出 ASR 友好的 MP3 格式（16kHz 单声道），减小文件体积。
 """
 
 import logging
@@ -19,12 +19,12 @@ def extract_audio(
 ) -> Path:
     """从视频文件中分离音频。
 
-    输出格式为 WAV（PCM 16-bit），单声道，16kHz 采样率，
-    这是 Whisper 等主流 ASR 引擎推荐的音频格式。
+    输出格式为 MP3，单声道，16kHz 采样率，
+    文件体积约为 WAV 的 1/10，适合上传到云端 ASR API。
 
     Args:
         video_path: 视频文件路径
-        output_path: 输出音频文件路径（建议以 .wav 结尾）
+        output_path: 输出音频文件路径（建议以 .mp3 结尾）
         sample_rate: 采样率，默认 16000Hz
 
     Returns:
@@ -45,15 +45,17 @@ def extract_audio(
     # 使用 ffmpeg 提取音频
     # 参数说明：
     # - ac=1: 单声道（ASR 不需要立体声）
-    # - ar=16000: 16kHz 采样率（Whisper 标准）
-    # - acodec=pcm_s16le: 16-bit PCM 编码（无损，ASR 友好）
+    # - ar=16000: 16kHz 采样率（ASR 标准）
+    # - acodec=libmp3lame: MP3 编码（压缩率高，文件小）
+    # - audio_bit_rate=64k: 64kbps 码率（语音足够）
     (
         ffmpeg.input(str(video_path))
         .output(
             str(output_path),
             ac=1,                    # 单声道
             ar=sample_rate,          # 采样率
-            acodec="pcm_s16le",      # 16-bit PCM 编码
+            acodec="libmp3lame",     # MP3 编码
+            audio_bit_rate="64k",    # 64kbps 码率
             vn=None,                 # 不包含视频流
         )
         .overwrite_output()

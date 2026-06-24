@@ -158,7 +158,22 @@ class CloudASRProvider(ASRProvider):
         logger.info("调用 OpenAI 兼容 ASR API: %s (model: %s)", audio_path, self.model)
 
         with open(audio_path, "rb") as audio_file:
-            files = {"file": (audio_path.name, audio_file, "audio/wav")}
+            # 根据文件扩展名确定 MIME 类型
+            ext = audio_path.suffix.lower()
+            if ext == ".mp3":
+                mime_type = "audio/mpeg"
+            elif ext == ".wav":
+                mime_type = "audio/wav"
+            elif ext == ".m4a":
+                mime_type = "audio/mp4"
+            elif ext == ".ogg":
+                mime_type = "audio/ogg"
+            elif ext == ".flac":
+                mime_type = "audio/flac"
+            else:
+                mime_type = "audio/mpeg"
+
+            files = {"file": (audio_path.name, audio_file, mime_type)}
             data: dict[str, Any] = {"model": self.model}
 
             # 硅基流动 API 仅接受 file 和 model 参数，不支持 language/response_format
