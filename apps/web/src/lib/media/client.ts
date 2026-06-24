@@ -11,6 +11,18 @@ import { MEDIA_SERVICE_URL } from "@/lib/config";
 // 类型定义
 // ============================================================================
 
+/** ASR 凭证（从用户配置读取，通过 header 传给媒体服务） */
+export interface AsrCredentials {
+  /** ASR 供应商（groq/openai） */
+  provider: string;
+  /** API Key（已解密） */
+  apiKey: string;
+  /** API URL */
+  apiUrl?: string;
+  /** 模型名 */
+  model?: string;
+}
+
 /** PDF 解析结果 */
 export interface PdfExtractResult {
   /** 提取的 Markdown 文本 */
@@ -66,6 +78,32 @@ export interface XiaohongshuProcessResult {
 // ============================================================================
 // 内部辅助
 // ============================================================================
+
+/**
+ * 构建 ASR 凭证 headers。
+ *
+ * 将用户配置的 ASR 凭证通过 HTTP header 传给媒体服务。
+ * 媒体服务优先使用 header 凭证，fallback 到环境变量。
+ *
+ * @param asrCredentials ASR 凭证（可选）
+ * @returns headers 对象（无凭证时为空对象）
+ */
+function buildAsrHeaders(asrCredentials?: AsrCredentials): Record<string, string> {
+  if (!asrCredentials) {
+    return {};
+  }
+  const headers: Record<string, string> = {
+    "X-ASR-Api-Key": asrCredentials.apiKey,
+    "X-ASR-Provider": asrCredentials.provider,
+  };
+  if (asrCredentials.apiUrl) {
+    headers["X-ASR-Api-Url"] = asrCredentials.apiUrl;
+  }
+  if (asrCredentials.model) {
+    headers["X-ASR-Model"] = asrCredentials.model;
+  }
+  return headers;
+}
 
 /**
  * 带超时的 fetch 请求。
@@ -164,19 +202,22 @@ export async function extractPdf(
  *
  * @param url 抖音视频分享链接
  * @param cookie 可选 Cookie（反爬）
+ * @param asrCredentials 可选 ASR 凭证（用户自带 Key，通过 header 传递）
  * @returns 抖音视频处理结果
  */
 export async function processDouyinVideo(
   url: string,
-  cookie?: string
+  cookie?: string,
+  asrCredentials?: AsrCredentials
 ): Promise<DouyinProcessResult> {
   const taskId = crypto.randomUUID();
+  const asrHeaders = buildAsrHeaders(asrCredentials);
 
   const response = await fetchWithTimeout(
     `${MEDIA_SERVICE_URL}/media/douyin`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...asrHeaders },
       body: JSON.stringify({ url, cookie, task_id: taskId }),
     },
     10 * 60 * 1000 // 10 分钟（下载 + ASR 耗时长）
@@ -200,19 +241,22 @@ export async function processDouyinVideo(
  *
  * @param url 小红书笔记链接
  * @param cookie 可选 Cookie
+ * @param asrCredentials 可选 ASR 凭证（用户自带 Key，通过 header 传递）
  * @returns 小红书笔记处理结果
  */
 export async function processXiaohongshuNote(
   url: string,
-  cookie?: string
+  cookie?: string,
+  asrCredentials?: AsrCredentials
 ): Promise<XiaohongshuProcessResult> {
   const taskId = crypto.randomUUID();
+  const asrHeaders = buildAsrHeaders(asrCredentials);
 
   const response = await fetchWithTimeout(
     `${MEDIA_SERVICE_URL}/media/xiaohongshu`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...asrHeaders },
       body: JSON.stringify({ url, cookie, task_id: taskId }),
     },
     10 * 60 * 1000 // 10 分钟

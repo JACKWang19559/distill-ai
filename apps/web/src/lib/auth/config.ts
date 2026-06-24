@@ -73,6 +73,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // 校验密码
         const isValid = await bcrypt.compare(password, user.password);
+
         if (!isValid) {
           return null;
         }

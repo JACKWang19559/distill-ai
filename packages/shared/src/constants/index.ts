@@ -41,6 +41,7 @@ export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
   qwen: "通义千问",
   deepseek: "DeepSeek",
   zhipu: "智谱 GLM",
+  minimax: "Minimax",
 };
 
 /** AI 供应商默认模型 */
@@ -50,6 +51,7 @@ export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
   qwen: "qwen-max",
   deepseek: "deepseek-chat",
   zhipu: "glm-4-plus",
+  minimax: "MiniMax-Text-01",
 };
 
 /** AI 供应商默认 API 地址 */
@@ -59,6 +61,7 @@ export const AI_PROVIDER_BASE_URLS: Record<AIProviderType, string> = {
   qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   deepseek: "https://api.deepseek.com",
   zhipu: "https://open.bigmodel.cn/api/paas/v4",
+  minimax: "https://api.minimaxi.com/v1",
 };
 
 /** 蒸馏阶段显示名称 */

@@ -8,7 +8,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from ..core.asr_provider import get_asr_provider
 from ..core.audio_extractor import extract_audio
@@ -23,7 +23,9 @@ router = APIRouter(prefix="/media", tags=["小红书笔记处理"])
 
 
 @router.post("/xiaohongshu", response_model=XiaohongshuResponse)
-async def process_xiaohongshu_note(request: XiaohongshuRequest) -> XiaohongshuResponse:
+async def process_xiaohongshu_note(
+    request: XiaohongshuRequest, req: Request
+) -> XiaohongshuResponse:
     """处理小红书笔记。
 
     流程：
@@ -31,8 +33,11 @@ async def process_xiaohongshu_note(request: XiaohongshuRequest) -> XiaohongshuRe
     2. 如果是视频笔记，下载视频并 ASR 转写
     3. 返回完整内容
 
+    ASR 凭证优先级：HTTP header（用户自带 Key）> 环境变量（服务端默认）
+
     Args:
         request: 包含 url、cookie、task_id 的请求体
+        req: FastAPI Request 对象，用于读取 header 中的 ASR 凭证
 
     Returns:
         XiaohongshuResponse: 包含笔记内容和转写文本的响应
@@ -43,6 +48,12 @@ async def process_xiaohongshu_note(request: XiaohongshuRequest) -> XiaohongshuRe
     """
     if not request.url or "xiaohongshu.com" not in request.url:
         raise HTTPException(status_code=400, detail="无效的小红书链接")
+
+    # 从 header 读取用户传入的 ASR 凭证（可选）
+    header_asr_key = req.headers.get("x-asr-api-key")
+    header_asr_url = req.headers.get("x-asr-api-url")
+    header_asr_model = req.headers.get("x-asr-model")
+    header_asr_provider = req.headers.get("x-asr-provider")
 
     task_dir = get_task_temp_dir(request.task_id, prefix="xiaohongshu")
 
@@ -70,8 +81,13 @@ async def process_xiaohongshu_note(request: XiaohongshuRequest) -> XiaohongshuRe
                 audio_path = task_dir / "audio.wav"
                 extract_audio(Path(video_info["file_path"]), audio_path)
 
-                # ASR 识别
-                asr_provider = get_asr_provider()
+                # ASR 识别（优先使用 header 凭证）
+                asr_provider = get_asr_provider(
+                    header_api_key=header_asr_key,
+                    header_api_url=header_asr_url,
+                    header_model=header_asr_model,
+                    header_provider=header_asr_provider,
+                )
                 transcript = asr_provider.transcribe(audio_path)
 
                 logger.info("[%s] 视频笔记 ASR 完成", request.task_id)

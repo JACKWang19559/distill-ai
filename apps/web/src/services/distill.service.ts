@@ -29,6 +29,7 @@ import { extractPdf, processDouyinVideo, processXiaohongshuNote } from "@/lib/me
 import { distillPdfInChunks } from "@/lib/extractor/pdf";
 import { createConnections } from "@/services/graph.service";
 import { PDF_CHUNK_MAX_CHARS } from "@/lib/config";
+import { getActiveAsrCredentials } from "@/lib/ai/factory";
 
 /** 蒸馏任务创建结果 */
 export interface CreateDistillTaskResult {
@@ -64,7 +65,7 @@ export async function createDistillTask(
   input: DistillInput
 ): Promise<CreateDistillTaskResult> {
   // 1. 准备原始内容
-  const { title, rawContent, mediaMeta } = await prepareContent(input);
+  const { title, rawContent, mediaMeta } = await prepareContent(input, userId);
 
   // 2. 创建 Knowledge 记录
   const knowledge = await prisma.knowledge.create({
@@ -311,10 +312,12 @@ export async function listDistillTasks(
  * 准备蒸馏内容：根据来源类型提取标题与原始内容。
  *
  * @param input 蒸馏输入
+ * @param userId 用户 ID（用于读取用户 ASR 配置）
  * @returns 标题、原始内容，以及可选的媒体元数据
  */
 async function prepareContent(
-  input: DistillInput
+  input: DistillInput,
+  userId: string
 ): Promise<{ title: string; rawContent: string; mediaMeta?: MediaMeta }> {
   switch (input.sourceType) {
     case "text":
@@ -350,7 +353,13 @@ async function prepareContent(
       if (!input.sourceUrl) {
         throw new Error("douyin 来源必须提供 sourceUrl 字段");
       }
-      const result = await processDouyinVideo(input.sourceUrl, input.cookie);
+      // 读取用户配置的 ASR 凭证（未配置则返回 null，媒体服务 fallback 到环境变量）
+      const asrCredentials = await getActiveAsrCredentials(userId);
+      const result = await processDouyinVideo(
+        input.sourceUrl,
+        input.cookie,
+        asrCredentials ?? undefined
+      );
       const mediaMeta: MediaMeta = {
         platform: "douyin",
         author: result.author,
@@ -368,9 +377,12 @@ async function prepareContent(
       if (!input.sourceUrl) {
         throw new Error("xiaohongshu 来源必须提供 sourceUrl 字段");
       }
+      // 读取用户配置的 ASR 凭证
+      const asrCredentials = await getActiveAsrCredentials(userId);
       const result = await processXiaohongshuNote(
         input.sourceUrl,
-        input.cookie
+        input.cookie,
+        asrCredentials ?? undefined
       );
       const mediaMeta: MediaMeta = {
         platform: "xiaohongshu",

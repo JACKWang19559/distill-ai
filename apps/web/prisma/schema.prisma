@@ -148,21 +148,24 @@ model KnowledgeConnection {
 
 /// AI 供应商 API 配置
 model ApiConfig {
-  id        String   @id @default(cuid())
-  userId    String
-  provider  String   // openai | anthropic | qwen | deepseek | zhipu | asr
-  name      String
-  apiKey    String   // AES-256-GCM 加密存储
-  model     String
-  baseUrl   String?
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String
+  configType String   @default("llm") // llm | asr
+  provider   String   // llm: openai|anthropic|qwen|deepseek|zhipu|minimax
+                      // asr: groq|openai
+  name       String
+  apiKey     String   // AES-256-GCM 加密存储
+  model      String
+  baseUrl    String?
+  isActive   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, configType, provider, name])
   @@index([userId])
-  @@index([userId, provider])
+  @@index([userId, configType, isActive])
 }
 
 /// 浏览器插件 API Token（长期令牌，用于跨域认证）

@@ -6,7 +6,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from ..config import settings
 from ..core.asr_provider import get_asr_provider
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/media", tags=["抖音视频处理"])
 
 
 @router.post("/douyin", response_model=DouyinResponse)
-async def process_douyin_video(request: DouyinRequest) -> DouyinResponse:
+async def process_douyin_video(request: DouyinRequest, req: Request) -> DouyinResponse:
     """处理抖音视频。
 
     完整流程：
@@ -30,8 +30,11 @@ async def process_douyin_video(request: DouyinRequest) -> DouyinResponse:
     3. 使用 ASR 引擎将音频转写为文本
     4. 清理临时文件并返回结果
 
+    ASR 凭证优先级：HTTP header（用户自带 Key）> 环境变量（服务端默认）
+
     Args:
         request: 包含 url、cookie、task_id 的请求体
+        req: FastAPI Request 对象，用于读取 header 中的 ASR 凭证
 
     Returns:
         DouyinResponse: 包含转写文本和视频元数据的响应
@@ -43,6 +46,12 @@ async def process_douyin_video(request: DouyinRequest) -> DouyinResponse:
     # 参数校验
     if not request.url or not request.url.strip():
         raise HTTPException(status_code=400, detail="抖音视频 URL 不能为空")
+
+    # 从 header 读取用户传入的 ASR 凭证（可选）
+    header_asr_key = req.headers.get("x-asr-api-key")
+    header_asr_url = req.headers.get("x-asr-api-url")
+    header_asr_model = req.headers.get("x-asr-model")
+    header_asr_provider = req.headers.get("x-asr-provider")
 
     # 创建任务专属临时目录
     task_dir = get_task_temp_dir(request.task_id, prefix="douyin")
@@ -78,9 +87,14 @@ async def process_douyin_video(request: DouyinRequest) -> DouyinResponse:
                 audio_url=str(audio_path),
             )
 
-        # 步骤 3：ASR 识别
+        # 步骤 3：ASR 识别（优先使用 header 凭证）
         logger.info("[%s] 开始 ASR 识别", request.task_id)
-        asr_provider = get_asr_provider()
+        asr_provider = get_asr_provider(
+            header_api_key=header_asr_key,
+            header_api_url=header_asr_url,
+            header_model=header_asr_model,
+            header_provider=header_asr_provider,
+        )
         transcript = asr_provider.transcribe(audio_path)
 
         logger.info("[%s] 抖音视频处理完成", request.task_id)

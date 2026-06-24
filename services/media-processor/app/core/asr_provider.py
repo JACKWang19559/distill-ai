@@ -218,12 +218,20 @@ class CloudASRProvider(ASRProvider):
 # ============================================================================
 
 
-def get_asr_provider(provider: str | None = None) -> ASRProvider:
+def get_asr_provider(
+    provider: str | None = None,
+    *,
+    header_api_key: str | None = None,
+    header_api_url: str | None = None,
+    header_model: str | None = None,
+    header_provider: str | None = None,
+) -> ASRProvider:
     """根据配置获取 ASR 供应商实例。
 
     优先级：
-    1. 显式传入的 provider 参数
-    2. 配置文件中的 ASR_PROVIDER
+    1. HTTP header 传入的用户凭证（header_api_key 等）
+    2. 显式传入的 provider 参数
+    3. 配置文件中的 ASR_PROVIDER
 
     降级策略：
     - 若选择 whisper-local 但 openai-whisper 未安装，自动降级为云端 ASR
@@ -231,6 +239,10 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
 
     Args:
         provider: 显式指定的供应商（可选）
+        header_api_key: 从 HTTP header 读取的用户 ASR API Key
+        header_api_url: 从 HTTP header 读取的 ASR API URL
+        header_model: 从 HTTP header 读取的 ASR 模型名
+        header_provider: 从 HTTP header 读取的 ASR 供应商
 
     Returns:
         ASRProvider 实例
@@ -238,6 +250,19 @@ def get_asr_provider(provider: str | None = None) -> ASRProvider:
     Raises:
         ValueError: 不支持的供应商，或所有供应商均不可用
     """
+    # 优先使用 header 传入的用户凭证
+    if header_api_key:
+        cloud_provider = header_provider or settings.CLOUD_ASR_PROVIDER or "openai"
+        cloud_url = header_api_url or settings.CLOUD_ASR_API_URL or ""
+        cloud_model = header_model or settings.CLOUD_ASR_MODEL or "whisper-1"
+        logger.info("使用用户传入的 ASR 凭证: provider=%s, model=%s", cloud_provider, cloud_model)
+        return CloudASRProvider(
+            provider=cloud_provider,
+            api_key=header_api_key,
+            api_url=cloud_url,
+            model=cloud_model,
+        )
+
     provider = provider or settings.ASR_PROVIDER
 
     if provider == "whisper-local":

@@ -65,15 +65,24 @@ export type AIProviderType =
   | "anthropic"
   | "qwen"
   | "deepseek"
-  | "zhipu";
+  | "zhipu"
+  | "minimax";
+
+/** ASR 供应商类型 */
+export type AsrProviderType = "groq" | "openai";
+
+/** API 配置类型 */
+export type ApiConfigType = "llm" | "asr";
 
 /** API 配置 */
 export interface ApiConfig {
   id: string;
   /** 用户 ID */
   userId: string;
-  /** 供应商类型 */
-  provider: AIProviderType;
+  /** 配置类型（llm | asr） */
+  configType: ApiConfigType;
+  /** 供应商类型（LLM 或 ASR） */
+  provider: string;
   /** 显示名称 */
   name: string;
   /** API Key（加密存储） */
@@ -92,7 +101,8 @@ export interface ApiConfig {
 
 /** 创建 API 配置请求 */
 export interface CreateApiConfigInput {
-  provider: AIProviderType;
+  configType?: ApiConfigType;
+  provider: string;
   name: string;
   apiKey: string;
   model: string;

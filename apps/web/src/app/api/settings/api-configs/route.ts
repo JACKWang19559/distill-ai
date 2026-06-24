@@ -20,11 +20,22 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   qwen: "qwen-plus",
   deepseek: "deepseek-chat",
   zhipu: "glm-4",
+  minimax: "MiniMax-Text-01",
+  // ASR 供应商
+  groq: "whisper-large-v3",
+  openai_asr: "whisper-1",
+};
+
+/** ASR 供应商默认 API URL */
+const ASR_DEFAULT_API_URLS: Record<string, string> = {
+  groq: "https://api.groq.com/openai/v1/audio/transcriptions",
+  openai: "https://api.openai.com/v1/audio/transcriptions",
 };
 
 /** 创建 API 配置 schema */
 const createConfigSchema = z.object({
-  provider: z.enum(["openai", "anthropic", "qwen", "deepseek", "zhipu"]),
+  configType: z.enum(["llm", "asr"]).default("llm"),
+  provider: z.string().min(1),
   name: z.string().min(1).max(50),
   apiKey: z.string().min(1).max(500),
   model: z.string().min(1).max(100).optional(),
@@ -37,8 +48,10 @@ const createConfigSchema = z.object({
  *
  * 返回的 apiKey 字段为掩码（如 sk-a1b2****c3d4），
  * 不暴露完整密钥。
+ *
+ * 支持通过 query 参数 configType 过滤（llm/asr）。
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -48,8 +61,19 @@ export async function GET() {
       );
     }
 
+    // 支持 ?configType=llm|asr 过滤
+    const { searchParams } = new URL(request.url);
+    const configType = searchParams.get("configType");
+
+    const whereClause: { userId: string; configType?: string } = {
+      userId: session.user.id,
+    };
+    if (configType === "llm" || configType === "asr") {
+      whereClause.configType = configType;
+    }
+
     const configs = await prisma.apiConfig.findMany({
-      where: { userId: session.user.id },
+      where: whereClause,
       orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
     });
 
@@ -64,6 +88,7 @@ export async function GET() {
       }
       return {
         id: c.id,
+        configType: c.configType,
         provider: c.provider,
         name: c.name,
         apiKey: maskedKey,
@@ -89,7 +114,7 @@ export async function GET() {
  * 创建新 API 配置。
  *
  * - API Key 使用 AES-256-GCM 加密后存储
- * - 如果 isActive=true，先将用户其他配置设为非激活
+ * - 如果 isActive=true，先将用户同类型（llm/asr）的其他配置设为非激活
  * - model 未提供时使用供应商默认模型
  */
 export async function POST(request: Request) {
@@ -117,12 +142,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { provider, name, apiKey, model, baseUrl, isActive } = parseResult.data;
+    const { configType, provider, name, apiKey, model, baseUrl, isActive } = parseResult.data;
 
-    // 如果设为激活，先取消其他激活配置
+    // 如果设为激活，先取消同类型的其他激活配置
     if (isActive) {
       await prisma.apiConfig.updateMany({
-        where: { userId: session.user.id, isActive: true },
+        where: {
+          userId: session.user.id,
+          configType,
+          isActive: true,
+        },
         data: { isActive: false },
       });
     }
@@ -130,15 +159,26 @@ export async function POST(request: Request) {
     // 加密 API Key
     const encryptedKey = encrypt(apiKey);
 
+    // 确定默认模型
+    const defaultModelKey = configType === "asr" ? provider : provider;
+    const finalModel = model ?? PROVIDER_DEFAULT_MODELS[defaultModelKey] ?? "gpt-4o";
+
+    // ASR 配置：如果未提供 baseUrl，使用供应商默认 API URL
+    let finalBaseUrl = baseUrl ?? null;
+    if (configType === "asr" && !finalBaseUrl && ASR_DEFAULT_API_URLS[provider]) {
+      finalBaseUrl = ASR_DEFAULT_API_URLS[provider];
+    }
+
     // 创建配置
     const config = await prisma.apiConfig.create({
       data: {
         userId: session.user.id,
+        configType,
         provider,
         name,
         apiKey: encryptedKey,
-        model: model ?? PROVIDER_DEFAULT_MODELS[provider] ?? "gpt-4o",
-        baseUrl: baseUrl ?? null,
+        model: finalModel,
+        baseUrl: finalBaseUrl,
         isActive: isActive ?? false,
       },
     });
@@ -148,6 +188,7 @@ export async function POST(request: Request) {
         success: true,
         data: {
           id: config.id,
+          configType: config.configType,
           provider: config.provider,
           name: config.name,
           model: config.model,

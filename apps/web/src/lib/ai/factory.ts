@@ -19,6 +19,8 @@ import { DeepSeekProvider } from "./deepseek";
 import { OpenAIProvider } from "./openai";
 import { QwenProvider } from "./qwen";
 import { ZhipuProvider } from "./zhipu";
+import { MinimaxProvider } from "./minimax";
+import type { AsrCredentials } from "@/lib/media/client";
 
 /** 供应商构造函数类型 */
 type ProviderConstructor = new (config: ProviderConfig) => AIProvider;
@@ -82,12 +84,13 @@ AIProviderFactory.register("anthropic", AnthropicProvider);
 AIProviderFactory.register("qwen", QwenProvider);
 AIProviderFactory.register("deepseek", DeepSeekProvider);
 AIProviderFactory.register("zhipu", ZhipuProvider);
+AIProviderFactory.register("minimax", MinimaxProvider);
 
 /**
- * 获取用户当前激活的 AI 供应商。
+ * 获取用户当前激活的 AI 供应商（LLM）。
  *
  * 流程：
- * 1. 从数据库读取用户 `isActive=true` 的 ApiConfig
+ * 1. 从数据库读取用户 `isActive=true` 且 `configType=llm` 的 ApiConfig
  * 2. 解密 API Key
  * 3. 通过工厂创建供应商实例
  *
@@ -96,11 +99,12 @@ AIProviderFactory.register("zhipu", ZhipuProvider);
  * @throws {AIProviderError} 未配置 API 或解密失败
  */
 export async function getActiveProvider(userId: string): Promise<AIProvider> {
-  // 查询用户激活的 API 配置
+  // 查询用户激活的 LLM API 配置
   const apiConfig = await prisma.apiConfig.findFirst({
     where: {
       userId,
       isActive: true,
+      configType: "llm",
     },
   });
 
@@ -131,6 +135,49 @@ export async function getActiveProvider(userId: string): Promise<AIProvider> {
   };
 
   return AIProviderFactory.create(apiConfig.provider, config);
+}
+
+/**
+ * 获取用户当前激活的 ASR 凭证。
+ *
+ * 用于抖音/小红书视频蒸馏时，将用户配置的 ASR Key
+ * 通过 HTTP header 传递给媒体服务。
+ *
+ * @param userId 用户 ID
+ * @returns ASR 凭证（未配置时返回 null，媒体服务将 fallback 到环境变量）
+ */
+export async function getActiveAsrCredentials(
+  userId: string
+): Promise<AsrCredentials | null> {
+  const apiConfig = await prisma.apiConfig.findFirst({
+    where: {
+      userId,
+      isActive: true,
+      configType: "asr",
+    },
+  });
+
+  if (!apiConfig) {
+    return null;
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = decrypt(apiConfig.apiKey);
+  } catch (err) {
+    throw new AIProviderError(
+      apiConfig.provider,
+      `ASR API Key 解密失败: ${(err as Error).message}`,
+      { cause: err }
+    );
+  }
+
+  return {
+    provider: apiConfig.provider,
+    apiKey,
+    apiUrl: apiConfig.baseUrl ?? undefined,
+    model: apiConfig.model || undefined,
+  };
 }
 
 /**

@@ -69,10 +69,15 @@ export async function PATCH(
 
     const { name, apiKey, model, baseUrl, isActive } = parseResult.data;
 
-    // 如果设为激活，先取消其他激活配置
+    // 如果设为激活，先取消同类型（llm/asr）的其他激活配置
     if (isActive) {
       await prisma.apiConfig.updateMany({
-        where: { userId: session.user.id, isActive: true, NOT: { id } },
+        where: {
+          userId: session.user.id,
+          configType: existing.configType,
+          isActive: true,
+          NOT: { id },
+        },
         data: { isActive: false },
       });
     }
