@@ -71,17 +71,17 @@ export function LinkInput({
       {showCookie && onCookieChange && (
         <div className="space-y-2">
           <Label htmlFor="cookie" className="text-xs text-gray-500">
-            Cookie（抖音/小红书反爬必需）
+            Cookie（可选，抖音通常不需要）
           </Label>
           <Textarea
             id="cookie"
             value={cookie}
             onChange={(e) => onCookieChange(e.target.value)}
-            placeholder="粘贴浏览器 Cookie"
+            placeholder="粘贴浏览器 Cookie（可选）"
             className="min-h-[80px] text-xs"
           />
           <p className="text-xs text-muted-foreground">
-            获取方法：在浏览器中打开抖音/小红书并登录，按 F12 打开开发者工具 → Network → 刷新页面 → 点击任意请求 → 复制 Request Headers 中的 Cookie 值粘贴到此处。
+            抖音视频默认无需 Cookie 即可下载。如遇下载失败，可在此提供 Cookie：浏览器打开抖音并登录 → F12 → Network → 刷新 → 复制任意请求的 Request Headers 中的 Cookie 值。
           </p>
         </div>
       )}
