@@ -91,8 +91,13 @@ export async function POST(request: Request) {
     }
 
     // 5. 保存文件
+    // UPLOAD_DIR 在生产环境是绝对路径 /tmp/distill-uploads，在开发环境是相对路径 uploads
+    // 使用 path.isAbsolute 判断，避免在绝对路径前误加 process.cwd()
     const userId = session.user.id;
-    const uploadDir = path.join(process.cwd(), UPLOAD_DIR, userId);
+    const baseDir = path.isAbsolute(UPLOAD_DIR)
+      ? UPLOAD_DIR
+      : path.join(process.cwd(), UPLOAD_DIR);
+    const uploadDir = path.join(baseDir, userId);
     await fs.mkdir(uploadDir, { recursive: true });
 
     const savedName = `${randomUUID()}${ext}`;
