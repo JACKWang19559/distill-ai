@@ -434,9 +434,20 @@ async function fetchUrlContent(
   try {
     const res = await fetch(url, {
       signal: controller.signal,
+      redirect: "follow",
       headers: {
+        // 使用真实浏览器 UA，避免被网站反爬虫机制拒绝
         "User-Agent":
-          "Mozilla/5.0 (compatible; DistillBot/1.0; +https://distill.app/bot)",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
       },
     });
 
@@ -444,20 +455,53 @@ async function fetchUrlContent(
       throw new Error(`抓取失败: HTTP ${res.status}`);
     }
 
+    // 检查 Content-Type，非 HTML 内容直接报错
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
+      throw new Error(
+        `不支持的内容类型: ${contentType}（仅支持 HTML 网页）`
+      );
+    }
+
     const html = await res.text();
+
+    if (!html || html.trim().length < 100) {
+      throw new Error("页面内容为空或过短");
+    }
 
     // 提取 <title>
     const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
     const title = titleMatch?.[1]?.trim() || url;
 
+    // 优先提取正文区域（article/main/[role=main]），避免导航/侧边栏干扰
+    let mainHtml = "";
+    const mainPatterns = [
+      /<article[\s\S]*?<\/article>/i,
+      /<main[\s\S]*?<\/main>/i,
+      /<div[^>]*role=["']main["'][\s\S]*?<\/div>/i,
+      /<div[^>]*id=["']content["'][\s\S]*?<\/div>/i,
+      /<div[^>]*class=["'][^"']*content[^"']*["'][\s\S]*?<\/div>/i,
+    ];
+    for (const pattern of mainPatterns) {
+      const match = html.match(pattern);
+      if (match && match[0].length > 500) {
+        mainHtml = match[0];
+        break;
+      }
+    }
+    // 如果没有找到正文区域，使用整个 HTML
+    const sourceHtml = mainHtml || html;
+
     // 基础 HTML 清洗：去除 script/style/nav/header/footer，提取文本
-    const cleaned = html
+    const cleaned = sourceHtml
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
       .replace(/<nav[\s\S]*?<\/nav>/gi, "")
       .replace(/<header[\s\S]*?<\/header>/gi, "")
       .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+      .replace(/<aside[\s\S]*?<\/aside>/gi, "")
       .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+      .replace(/<form[\s\S]*?<\/form>/gi, "")
       // 块级元素换行
       .replace(/<\/(p|div|section|article|h[1-6]|li|br)>/gi, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
@@ -470,6 +514,10 @@ async function fetchUrlContent(
       .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&#x2F;/g, "/")
+      .replace(/&hellip;/g, "…")
+      .replace(/&mdash;/g, "—")
+      .replace(/&ndash;/g, "–")
       // 压缩空白
       .replace(/[ \t]+/g, " ")
       .replace(/\n{3,}/g, "\n\n")
@@ -481,8 +529,8 @@ async function fetchUrlContent(
       ? cleaned.slice(0, maxChars) + "\n\n[内容已截断]"
       : cleaned;
 
-    if (!content) {
-      throw new Error("无法从页面提取正文内容");
+    if (!content || content.length < 10) {
+      throw new Error("无法从页面提取正文内容（页面可能是 JavaScript 动态渲染）");
     }
 
     return { title, content };
