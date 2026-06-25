@@ -118,6 +118,7 @@ class CloudASRProvider(ASRProvider):
         """调用云端 ASR API 转写音频。
 
         根据供应商类型路由到不同的实现。
+        对于硅基流动等有时长限制的供应商，自动分片处理。
 
         Args:
             audio_path: 音频文件路径
@@ -129,7 +130,11 @@ class CloudASRProvider(ASRProvider):
             ValueError: 不支持的供应商
             Exception: API 调用失败
         """
-        if self.provider in ("openai", "groq", "siliconflow"):
+        # 硅基流动建议时长 < 5 分钟，超长音频自动分片
+        if self.provider == "siliconflow":
+            return self._transcribe_with_chunking(audio_path)
+
+        if self.provider in ("openai", "groq"):
             return self._transcribe_with_openai(audio_path)
         elif self.provider == "tongyi":
             return self._transcribe_with_tongyi(audio_path)
@@ -137,6 +142,102 @@ class CloudASRProvider(ASRProvider):
             return self._transcribe_with_xunfei(audio_path)
         else:
             raise ValueError(f"不支持的云端 ASR 供应商: {self.provider}")
+
+    def _transcribe_with_chunking(self, audio_path: Path) -> str:
+        """分片转写长音频（硅基流动专用）。
+
+        硅基流动 ASR API 建议时长 < 5 分钟，超过会返回 500。
+        此方法将长音频按 4 分钟分片，分别转写后拼接。
+
+        Args:
+            audio_path: 音频文件路径
+
+        Returns:
+            合并后的转写文本
+        """
+        import ffmpeg
+
+        # 获取音频时长
+        try:
+            probe = ffmpeg.probe(str(audio_path))
+            duration = float(probe["format"]["duration"])
+        except (ffmpeg.Error, KeyError) as e:
+            logger.warning("获取音频时长失败，直接整体转写: %s", e)
+            return self._transcribe_with_openai(audio_path)
+
+        # 分片阈值：4 分钟（留 1 分钟余量，硅基流动限制 5 分钟）
+        chunk_duration = 240  # 秒
+        if duration <= chunk_duration:
+            logger.info("音频时长 %.1f 秒，无需分片", duration)
+            return self._transcribe_with_openai(audio_path)
+
+        # 计算分片数量
+        chunk_count = int(duration // chunk_duration) + (1 if duration % chunk_duration > 0 else 0)
+        logger.info("音频时长 %.1f 秒，分片为 %d 段（每段 %d 秒）", duration, chunk_count, chunk_duration)
+
+        chunks_dir = audio_path.parent / f"{audio_path.stem}_chunks"
+        chunks_dir.mkdir(exist_ok=True)
+
+        transcript_parts = []
+        try:
+            for i in range(chunk_count):
+                start_time = i * chunk_duration
+                chunk_path = chunks_dir / f"chunk_{i:03d}{audio_path.suffix}"
+
+                # 使用 ffmpeg 分片
+                try:
+                    (
+                        ffmpeg.input(str(audio_path), ss=start_time, t=chunk_duration)
+                        .output(
+                            str(chunk_path),
+                            acodec="copy",  # 直接复制，不重新编码（速度快）
+                        )
+                        .overwrite_output()
+                        .run(capture_stderr=True, quiet=True)
+                    )
+                except ffmpeg.Error:
+                    # copy 模式失败时回退到重新编码
+                    (
+                        ffmpeg.input(str(audio_path), ss=start_time, t=chunk_duration)
+                        .output(
+                            str(chunk_path),
+                            ac=1,
+                            ar=16000,
+                            acodec="libmp3lame",
+                            **{"b:a": "64k"},
+                        )
+                        .overwrite_output()
+                        .run(capture_stderr=True, quiet=True)
+                    )
+
+                if not chunk_path.exists():
+                    logger.warning("分片 %d 生成失败，跳过", i)
+                    continue
+
+                chunk_size = chunk_path.stat().st_size
+                logger.info("转写分片 %d/%d: %s (%d KB)", i + 1, chunk_count, chunk_path.name, chunk_size // 1024)
+
+                try:
+                    part = self._transcribe_with_openai(chunk_path)
+                    transcript_parts.append(part)
+                    logger.info("分片 %d 转写完成: %d 字符", i + 1, len(part))
+                except Exception as e:
+                    logger.error("分片 %d 转写失败: %s", i + 1, e)
+                    # 单片失败不阻断整体流程，继续下一片
+
+            # 清理分片文件
+            import shutil
+            shutil.rmtree(chunks_dir, ignore_errors=True)
+
+        except Exception as e:
+            # 确保清理分片目录
+            import shutil
+            shutil.rmtree(chunks_dir, ignore_errors=True)
+            raise
+
+        result = "".join(transcript_parts)
+        logger.info("分片转写完成: 共 %d 段, 合并后 %d 字符", len(transcript_parts), len(result))
+        return result
 
     def _transcribe_with_openai(self, audio_path: Path) -> str:
         """使用 OpenAI Whisper API 转写。
