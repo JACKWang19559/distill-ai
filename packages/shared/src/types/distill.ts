@@ -10,12 +10,14 @@ export interface DistillInput {
   sourceType: SourceType;
   /** 来源 URL（url/douyin/xiaohongshu 类型必填） */
   sourceUrl?: string;
-  /** 文本内容（text/markdown 类型必填） */
+  /** 文本内容（text/markdown 类型必填；pdf 类型前端直传后也通过此字段传递 Markdown） */
   content?: string;
-  /** 文件路径（pdf 类型必填） */
+  /** 文件路径（pdf 类型可选，与 content 二选一） */
   filePath?: string;
   /** 是否使用 Hybrid 模式（PDF） */
   useHybrid?: boolean;
+  /** PDF 页数（前端直传媒体服务后返回，用于标题展示） */
+  pageCount?: number;
   /** Cookie（抖音/小红书反爬） */
   cookie?: string;
   /** 知识条目 ID（更新已有条目时使用） */

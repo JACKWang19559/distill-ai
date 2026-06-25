@@ -83,6 +83,10 @@ export default function DashboardPage() {
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
   const [pdfFilePath, setPdfFilePath] = useState<string | null>(null);
+  /** PDF 直传媒体服务后的 Markdown 内容（绕过 Vercel 4.5MB 限制） */
+  const [pdfContent, setPdfContent] = useState<string | null>(null);
+  /** PDF 直传后的页数（用于标题展示） */
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [useHybrid, setUseHybrid] = useState(false);
   const [douyinUrl, setDouyinUrl] = useState("");
   const [douyinCookie, setDouyinCookie] = useState("");
@@ -169,7 +173,15 @@ export default function DashboardPage() {
       case "url":
         return { sourceType: "url", sourceUrl: url };
       case "pdf":
-        return { sourceType: "pdf", filePath: pdfFilePath, useHybrid };
+        // 优先使用直传到媒体服务后返回的 Markdown 内容（绕过 Vercel 4.5MB 限制）
+        // 回退到 filePath（旧链路，仅适用于 < 4.5MB 的文件）
+        return {
+          sourceType: "pdf",
+          ...(pdfContent
+            ? { content: pdfContent, pageCount: pdfPageCount ?? 0 }
+            : { filePath: pdfFilePath }),
+          useHybrid,
+        };
       case "douyin":
         return {
           sourceType: "douyin",
@@ -185,7 +197,7 @@ export default function DashboardPage() {
       default:
         throw new Error("不支持的输入模式");
     }
-  }, [mode, content, url, pdfFilePath, useHybrid, douyinUrl, douyinCookie, xhsUrl, xhsCookie]);
+  }, [mode, content, url, pdfFilePath, pdfContent, pdfPageCount, useHybrid, douyinUrl, douyinCookie, xhsUrl, xhsCookie]);
 
   /** 提交蒸馏任务（内部复用，支持重试） */
   const submitDistill = useCallback(async (body: Record<string, unknown>) => {
@@ -263,7 +275,7 @@ export default function DashboardPage() {
     state === "idle" &&
     ((mode === "text" && content.trim().length > 0) ||
       (mode === "url" && url.trim().length > 0) ||
-      (mode === "pdf" && Boolean(pdfFilePath)) ||
+      (mode === "pdf" && (Boolean(pdfContent) || Boolean(pdfFilePath))) ||
       (mode === "douyin" && douyinUrl.trim().length > 0) ||
       (mode === "xiaohongshu" && xhsUrl.trim().length > 0));
 
@@ -339,11 +351,22 @@ export default function DashboardPage() {
                     <Label>上传 PDF 文件</Label>
                     <FileUpload
                       accept=".pdf"
-                      onUploaded={(file: UploadedFile) =>
-                        setPdfFilePath(file.filePath)
-                      }
-                      onClear={() => setPdfFilePath(null)}
+                      maxSize={50 * 1024 * 1024}
+                      directUpload
+                      useHybrid={useHybrid}
+                      onDirectUploaded={(result) => {
+                        setPdfContent(result.content);
+                        setPdfPageCount(result.pageCount);
+                      }}
+                      onClear={() => {
+                        setPdfContent(null);
+                        setPdfPageCount(null);
+                        setPdfFilePath(null);
+                      }}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      文件直接上传到媒体服务处理，支持最大 50MB，绕过 Vercel 4.5MB 限制
+                    </p>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <input

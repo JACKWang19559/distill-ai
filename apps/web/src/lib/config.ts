@@ -3,8 +3,15 @@
  *
  * 本地开发：http://localhost:8001
  * 生产环境：通过 MEDIA_SERVICE_URL 环境变量配置（Render.com 部署的地址）
+ *
+ * NEXT_PUBLIC_MEDIA_SERVICE_URL 为浏览器端可见地址，
+ * 用于前端直接上传大文件到媒体服务，绕过 Vercel 4.5MB 请求体限制。
  */
 export const MEDIA_SERVICE_URL = process.env.MEDIA_SERVICE_URL ?? "http://localhost:8001";
+
+/** 浏览器端可见的媒体服务地址（前端直传大文件用） */
+export const PUBLIC_MEDIA_SERVICE_URL =
+  process.env.NEXT_PUBLIC_MEDIA_SERVICE_URL ?? MEDIA_SERVICE_URL;
 
 /**
  * 文件上传目录。

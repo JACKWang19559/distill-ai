@@ -181,7 +181,8 @@ pnpm --filter @distill/extension build
 | `NEXTAUTH_URL` | 应用对外访问 URL | `http://localhost:3000` |
 | `NEXTAUTH_SECRET` | NextAuth 加密密钥（生产必改） | - |
 | `GITHUB_ID` / `GITHUB_SECRET` | GitHub OAuth 凭证（可选） | - |
-| `MEDIA_SERVICE_URL` | 媒体处理服务地址 | `http://localhost:8001` |
+| `MEDIA_SERVICE_URL` | 媒体处理服务地址（服务端调用） | `http://localhost:8001` |
+| `NEXT_PUBLIC_MEDIA_SERVICE_URL` | 媒体处理服务地址（浏览器直传大文件用，部署在 Vercel 时必填） | 同 `MEDIA_SERVICE_URL` |
 
 > AI 供应商 API Key 与 ASR API Key 均在应用内「设置」页面管理，使用 AES-256-GCM 加密存储于数据库。
 >

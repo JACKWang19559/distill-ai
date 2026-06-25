@@ -1,8 +1,9 @@
 /**
  * 文件上传组件。
  *
- * 支持拖拽和点击两种方式选择文件。
- * 上传到 /api/upload，返回 filePath。
+ * 支持两种模式：
+ * - 默认模式：上传到 /api/upload（受 Vercel 4.5MB 限制，仅用于小文件）
+ * - directUpload 模式：直接上传到媒体服务 /pdf/extract（绕过 Vercel 限制，用于大 PDF）
  */
 
 "use client";
@@ -11,11 +12,12 @@ import { useState, useRef, useCallback } from "react";
 import { UploadCloud, File as FileIcon, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PUBLIC_MEDIA_SERVICE_URL } from "@/lib/config";
 
 /** 上传文件状态 */
 type UploadState = "idle" | "uploading" | "success" | "error";
 
-/** 已上传文件信息 */
+/** 已上传文件信息（默认模式） */
 export interface UploadedFile {
   /** 服务端文件路径 */
   filePath: string;
@@ -25,15 +27,35 @@ export interface UploadedFile {
   size: number;
 }
 
+/** 直传到媒体服务后返回的解析结果 */
+export interface DirectUploadResult {
+  /** 原始文件名 */
+  fileName: string;
+  /** 文件大小（字节） */
+  size: number;
+  /** PDF 解析后的 Markdown 文本 */
+  content: string;
+  /** 页数 */
+  pageCount: number;
+  /** 是否使用了 Hybrid 模式 */
+  usedHybrid: boolean;
+}
+
 interface FileUploadProps {
-  /** 上传完成回调 */
-  onUploaded: (file: UploadedFile) => void;
+  /** 上传完成回调（默认模式） */
+  onUploaded?: (file: UploadedFile) => void;
+  /** 直传完成回调（directUpload 模式） */
+  onDirectUploaded?: (result: DirectUploadResult) => void;
   /** 清除回调 */
   onClear?: () => void;
   /** 接受的文件类型 */
   accept?: string;
   /** 最大文件大小（字节） */
   maxSize?: number;
+  /** 是否直传到媒体服务（绕过 Vercel 限制） */
+  directUpload?: boolean;
+  /** 是否启用 Hybrid 模式（仅 directUpload 时生效） */
+  useHybrid?: boolean;
 }
 
 /** 格式化文件大小 */
@@ -45,27 +67,88 @@ function formatSize(bytes: number): string {
 
 export function FileUpload({
   onUploaded,
+  onDirectUploaded,
   onClear,
   accept = ".pdf,.txt,.md",
   maxSize = 20 * 1024 * 1024,
+  directUpload = false,
+  useHybrid = false,
 }: FileUploadProps) {
   const [state, setState] = useState<UploadState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<
+    UploadedFile | DirectUploadResult | null
+  >(null);
   const [progress, setProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
-  /** 上传文件 */
-  const uploadFile = useCallback(
+  /** 上传文件到媒体服务 /pdf/extract（绕过 Vercel 4.5MB 限制） */
+  const uploadToMediaService = useCallback(
     (file: File) => {
-      // 校验大小
-      if (file.size > maxSize) {
-        setError(`文件大小超过限制（最大 ${formatSize(maxSize)}）`);
-        setState("error");
-        return;
-      }
+      setState("uploading");
+      setError(null);
+      setProgress(0);
 
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("use_hybrid", String(useHybrid));
+
+      const xhr = new XMLHttpRequest();
+      xhrRef.current = xhr;
+
+      // 进度监听
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          setProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      });
+
+      // 完成监听
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            const result: DirectUploadResult = {
+              fileName: file.name,
+              size: file.size,
+              content: data.markdown ?? "",
+              pageCount: data.page_count ?? 0,
+              usedHybrid: data.used_hybrid ?? false,
+            };
+            setUploadedFile(result);
+            setState("success");
+            onDirectUploaded?.(result);
+          } catch {
+            setError("解析媒体服务响应失败");
+            setState("error");
+          }
+        } else {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            setError(data.detail ?? `上传失败 (HTTP ${xhr.status})`);
+          } catch {
+            setError(`上传失败 (HTTP ${xhr.status})`);
+          }
+          setState("error");
+        }
+      });
+
+      // 错误监听
+      xhr.addEventListener("error", () => {
+        setError("网络错误，上传失败");
+        setState("error");
+      });
+
+      xhr.open("POST", `${PUBLIC_MEDIA_SERVICE_URL}/pdf/extract`);
+      xhr.send(formData);
+    },
+    [useHybrid, onDirectUploaded]
+  );
+
+  /** 上传文件到 /api/upload（默认模式，受 Vercel 4.5MB 限制） */
+  const uploadToApi = useCallback(
+    (file: File) => {
       setState("uploading");
       setError(null);
       setProgress(0);
@@ -91,7 +174,7 @@ export function FileUpload({
             const uploaded: UploadedFile = response.data;
             setUploadedFile(uploaded);
             setState("success");
-            onUploaded(uploaded);
+            onUploaded?.(uploaded);
           } else {
             setError(response.error?.message ?? "上传失败");
             setState("error");
@@ -116,7 +199,26 @@ export function FileUpload({
       xhr.open("POST", "/api/upload");
       xhr.send(formData);
     },
-    [maxSize, onUploaded]
+    [onUploaded]
+  );
+
+  /** 上传文件（根据 directUpload 路由到不同实现） */
+  const uploadFile = useCallback(
+    (file: File) => {
+      // 校验大小
+      if (file.size > maxSize) {
+        setError(`文件大小超过限制（最大 ${formatSize(maxSize)}）`);
+        setState("error");
+        return;
+      }
+
+      if (directUpload) {
+        uploadToMediaService(file);
+      } else {
+        uploadToApi(file);
+      }
+    },
+    [maxSize, directUpload, uploadToMediaService, uploadToApi]
   );
 
   /** 处理文件选择 */

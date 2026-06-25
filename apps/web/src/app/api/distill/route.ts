@@ -19,9 +19,11 @@ import {
 const createDistillSchema = z.object({
   sourceType: z.enum(["text", "markdown", "url", "pdf", "douyin", "xiaohongshu"]),
   sourceUrl: z.string().url().optional(),
-  content: z.string().min(1).max(500_000).optional(),
+  content: z.string().min(1).max(2_000_000).optional(),
   filePath: z.string().optional(),
   useHybrid: z.boolean().optional(),
+  /** PDF 直传媒体服务后返回的页数（仅 sourceType=pdf + content 时生效） */
+  pageCount: z.number().int().min(0).optional(),
   cookie: z.string().optional(),
   knowledgeId: z.string().optional(),
 }).refine(
@@ -30,9 +32,13 @@ const createDistillSchema = z.object({
     if ((data.sourceType === "text" || data.sourceType === "markdown") && !data.content) {
       return false;
     }
-    // url/pdf/douyin/xiaohongshu 必须有 sourceUrl 或 filePath
-    if (["url", "pdf", "douyin", "xiaohongshu"].includes(data.sourceType)) {
-      if (!data.sourceUrl && !data.filePath) return false;
+    // pdf 可以前端直传 content（绕过 Vercel 4.5MB 限制），或提供 filePath
+    if (data.sourceType === "pdf") {
+      if (!data.content && !data.filePath) return false;
+    }
+    // url/douyin/xiaohongshu 必须有 sourceUrl
+    if (["url", "douyin", "xiaohongshu"].includes(data.sourceType)) {
+      if (!data.sourceUrl) return false;
     }
     return true;
   },

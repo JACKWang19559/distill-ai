@@ -339,8 +339,17 @@ async function prepareContent(
     }
 
     case "pdf": {
+      // 前端直传模式：媒体服务已解析为 Markdown，直接使用 content（绕过 Vercel 4.5MB 限制）
+      if (input.content) {
+        const pageCount = input.pageCount ?? 0;
+        return {
+          title: pageCount > 0 ? `PDF 文档（${pageCount} 页）` : "PDF 文档",
+          rawContent: input.content,
+        };
+      }
+      // 回退模式：filePath 由服务端读取并调用媒体服务解析（仅适用于 < 4.5MB 文件）
       if (!input.filePath) {
-        throw new Error("pdf 来源必须提供 filePath 字段");
+        throw new Error("pdf 来源必须提供 content 或 filePath 字段");
       }
       const result = await extractPdf(input.filePath, input.useHybrid);
       return {
