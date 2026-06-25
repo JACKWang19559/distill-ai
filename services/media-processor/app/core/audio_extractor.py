@@ -79,7 +79,7 @@ def extract_audio(
                 ac=1,                    # 单声道
                 ar=sample_rate,          # 采样率
                 acodec="libmp3lame",     # MP3 编码
-                audio_bit_rate="64k",    # 64kbps 码率
+                **{"b:a": "64k"},        # 64kbps 码率（ffmpeg 参数是 -b:a，不是 audio_bit_rate）
                 vn=None,                 # 不包含视频流
             )
             .overwrite_output()
