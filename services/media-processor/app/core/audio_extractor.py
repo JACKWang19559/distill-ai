@@ -42,25 +42,56 @@ def extract_audio(
 
     logger.info("开始分离音频: %s -> %s", video_path, output_path)
 
+    # 先探测视频是否包含音频流（避免 ffmpeg 失败时只有通用错误）
+    try:
+        probe = ffmpeg.probe(str(video_path))
+        streams = probe.get("streams", [])
+        audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+        video_streams = [s for s in streams if s.get("codec_type") == "video"]
+        logger.info(
+            "视频探测: 视频流 %d 条, 音频流 %d 条 (格式: %s)",
+            len(video_streams),
+            len(audio_streams),
+            probe.get("format", {}).get("format_name", "unknown"),
+        )
+        if not audio_streams:
+            raise RuntimeError(
+                f"视频文件不包含音频流: {video_path}（视频流 {len(video_streams)} 条, 音频流 0 条）"
+            )
+    except ffmpeg.Error as e:
+        # probe 失败不阻断流程，继续尝试 ffmpeg 转换
+        logger.warning("视频探测失败（将继续尝试转换）: %s", e)
+
     # 使用 ffmpeg 提取音频
     # 参数说明：
     # - ac=1: 单声道（ASR 不需要立体声）
     # - ar=16000: 16kHz 采样率（ASR 标准）
     # - acodec=libmp3lame: MP3 编码（压缩率高，文件小）
     # - audio_bit_rate=64k: 64kbps 码率（语音足够）
-    (
-        ffmpeg.input(str(video_path))
-        .output(
-            str(output_path),
-            ac=1,                    # 单声道
-            ar=sample_rate,          # 采样率
-            acodec="libmp3lame",     # MP3 编码
-            audio_bit_rate="64k",    # 64kbps 码率
-            vn=None,                 # 不包含视频流
+    #
+    # 注意：capture_stderr=True 让 ffmpeg-python 捕获 stderr 输出，
+    # 这样异常时能拿到真正的错误原因，而不是 "see stderr output for detail"
+    try:
+        (
+            ffmpeg.input(str(video_path))
+            .output(
+                str(output_path),
+                ac=1,                    # 单声道
+                ar=sample_rate,          # 采样率
+                acodec="libmp3lame",     # MP3 编码
+                audio_bit_rate="64k",    # 64kbps 码率
+                vn=None,                 # 不包含视频流
+            )
+            .overwrite_output()
+            .run(capture_stderr=True)
         )
-        .overwrite_output()
-        .run(quiet=True)
-    )
+    except ffmpeg.Error as e:
+        # 解码 ffmpeg 的 stderr 输出，记录真实错误原因
+        stderr_output = e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
+        logger.error("ffmpeg 转换失败 (stderr):\n%s", stderr_output)
+        raise RuntimeError(
+            f"ffmpeg 音频提取失败: {stderr_output[-500:] if stderr_output else str(e)}"
+        ) from e
 
     if not output_path.exists():
         raise RuntimeError(f"音频分离完成但未找到输出文件: {output_path}")

@@ -188,7 +188,20 @@ class CloudASRProvider(ASRProvider):
 
             with httpx.Client(timeout=300) as client:
                 response = client.post(api_url, files=files, data=data, headers=headers)
-                response.raise_for_status()
+
+                # 失败时记录响应体，方便排查 4xx/5xx 原因
+                if response.status_code >= 400:
+                    body = response.text
+                    logger.error(
+                        "ASR API 返回 %d: %s (provider=%s, model=%s, file=%s, size=%d bytes)",
+                        response.status_code,
+                        body[:1000],
+                        self.provider,
+                        self.model,
+                        audio_path.name,
+                        audio_path.stat().st_size,
+                    )
+                    response.raise_for_status()
 
                 # 硅基流动返回 JSON {"text": "..."}，OpenAI/Groq 在 response_format=text 时返回纯文本
                 if self.provider == "siliconflow":
