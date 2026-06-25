@@ -136,7 +136,16 @@ export function FileUpload({
 
       // 错误监听
       xhr.addEventListener("error", () => {
-        setError("网络错误，上传失败");
+        // 提供更具体的错误提示，帮助排查配置问题
+        if (PUBLIC_MEDIA_SERVICE_URL.includes("localhost")) {
+          setError(
+            "网络错误：媒体服务地址指向 localhost，生产环境需配置 NEXT_PUBLIC_MEDIA_SERVICE_URL 环境变量"
+          );
+        } else {
+          setError(
+            `网络错误，无法连接媒体服务 (${PUBLIC_MEDIA_SERVICE_URL})。请检查服务是否运行或 CORS 配置`
+          );
+        }
         setState("error");
       });
 

@@ -158,11 +158,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 中间件（允许 Next.js 主服务跨域调用）
+# CORS 中间件（允许浏览器直传大文件 + Next.js 服务跨域调用）
+# 注意：allow_origins=["*"] + allow_credentials=True 在浏览器中冲突，
+# 会致 CORS 预检失败（FormData POST 会触发预检）。
+# 改为显式列出允许的来源，或不使用 credentials。
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应限制为 Next.js 服务地址
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,  # 不需要 Cookie，关闭即可与通配符 origin 共存
     allow_methods=["*"],
     allow_headers=["*"],
 )
