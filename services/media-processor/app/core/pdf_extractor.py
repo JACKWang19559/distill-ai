@@ -82,6 +82,28 @@ def extract_pdf_text(
     # 确保输出目录存在
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # 文件大小检查：大文件直接使用 PyMuPDF，避免 Java OOM
+    # Render 免费计划 512MB RAM，Java JVM + 大 PDF 容易导致 OOM 杀死整个进程
+    file_size = pdf_path.stat().st_size
+    # 5MB 以上文件使用轻量级解析器
+    LARGE_FILE_THRESHOLD = 5 * 1024 * 1024
+
+    if file_size > LARGE_FILE_THRESHOLD:
+        logger.info(
+            "文件较大 (%d KB > %d KB)，直接使用 PyMuPDF 轻量级解析（避免 Java OOM）",
+            file_size // 1024,
+            LARGE_FILE_THRESHOLD // 1024,
+        )
+        markdown_content = _extract_with_pymupdf(pdf_path)
+        page_count = _get_page_count_from_pdf(pdf_path)
+        return {
+            "markdown": markdown_content,
+            "page_count": page_count,
+            "format": "markdown",
+            "used_hybrid": False,
+            "output_path": str(pdf_path),
+        }
+
     # 构建 opendataloader-pdf 调用参数
     convert_kwargs: dict[str, Any] = {
         "input_path": [str(pdf_path)],
@@ -101,7 +123,35 @@ def extract_pdf_text(
     # 调用 opendataloader-pdf 进行转换
     # 注意：每次 convert() 调用会启动一个 JVM 进程，
     # 批量处理时应一次性传入所有文件以提高效率
-    opendataloader_pdf.convert(**convert_kwargs)
+    #
+    # Render 免费计划只有 512MB RAM，Java JVM 解析大 PDF 可能导致 OOM
+    # 设置 Java 堆内存上限为 256MB，避免 OOM 杀死整个服务进程
+    import os
+
+    # 限制 Java 堆内存，防止 OOM（通过 _JAVA_OPTIONS 环境变量）
+    # _JAVA_OPTIONS 会被所有 Java 进程继承
+    existing_java_opts = os.environ.get("_JAVA_OPTIONS", "")
+    if "-Xmx" not in existing_java_opts:
+        os.environ["_JAVA_OPTIONS"] = f"{existing_java_opts} -Xmx256m".strip()
+
+    try:
+        opendataloader_pdf.convert(**convert_kwargs)
+    except Exception as opendataloader_err:
+        # opendataloader-pdf 失败（OOM、超时、Java 崩溃等）
+        # 降级到 PyMuPDF 轻量级解析
+        logger.warning(
+            "opendataloader-pdf 解析失败: %s，降级到 PyMuPDF 轻量级解析",
+            opendataloader_err,
+        )
+        markdown_content = _extract_with_pymupdf(pdf_path)
+        page_count = _get_page_count_from_pdf(pdf_path)
+        return {
+            "markdown": markdown_content,
+            "page_count": page_count,
+            "format": "markdown",
+            "used_hybrid": False,
+            "output_path": str(pdf_path),
+        }
 
     # 查找生成的 Markdown 文件
     # opendataloader-pdf 输出文件名通常为 {原文件名}.md
@@ -163,6 +213,59 @@ def _get_page_count_from_pdf(pdf_path: Path) -> int:
     except Exception as e:
         logger.warning("pypdf 读取页数失败: %s，将返回 0", e)
         return 0
+
+
+def _extract_with_pymupdf(pdf_path: Path) -> str:
+    """使用 PyMuPDF (fitz) 提取 PDF 文本作为 fallback。
+
+    PyMuPDF 是轻量级纯 C 语言实现的 PDF 解析库，
+    不依赖 Java，内存占用低（~50MB vs Java 的 ~300MB+），
+    适合在内存受限的环境（如 Render 免费计划 512MB）中使用。
+
+    Args:
+        pdf_path: PDF 文件路径
+
+    Returns:
+        提取的 Markdown 格式文本
+
+    Raises:
+        ImportError: PyMuPDF 未安装
+        Exception: PDF 解析失败
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as e:
+        raise ImportError(
+            "PyMuPDF 未安装，请运行: pip install PyMuPDF"
+        ) from e
+
+    pdf_path = Path(pdf_path)
+    logger.info("使用 PyMuPDF 解析 PDF: %s", pdf_path.name)
+
+    doc = fitz.open(str(pdf_path))
+    try:
+        parts = []
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            text = page.get_text("text")
+
+            # 转换为简单的 Markdown 格式
+            if text.strip():
+                # 添加页码标记
+                parts.append(f"\n\n--- 第 {page_num + 1} 页 ---\n\n")
+                parts.append(text.strip())
+                parts.append("\n")
+
+        markdown = "".join(parts).strip()
+        logger.info(
+            "PyMuPDF 解析完成: %s (%d 页, %d 字符)",
+            pdf_path.name,
+            len(doc),
+            len(markdown),
+        )
+        return markdown
+    finally:
+        doc.close()
 
 
 def _get_page_count(output_dir: Path, stem: str) -> int:

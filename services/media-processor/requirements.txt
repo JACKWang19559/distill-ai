@@ -26,6 +26,10 @@ opendataloader-pdf==2.4.7
 # PDF 页数读取（轻量级，无额外依赖）
 pypdf==4.0.1
 
+# PDF 文本提取 fallback（当 opendataloader-pdf 因内存不足失败时使用）
+# PyMuPDF 非常轻量、快速，不依赖 Java
+PyMuPDF==1.24.1
+
 # ASR 语音识别（本地 Whisper 兜底）
 # 注意：openai-whisper 依赖 torch，体积较大（~2GB）
 # 生产部署时注释此行，改用云端 ASR API（CLOUD_ASR_PROVIDER=openai）
