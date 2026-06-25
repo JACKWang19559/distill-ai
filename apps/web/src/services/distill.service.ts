@@ -420,6 +420,101 @@ async function prepareContent(
 }
 
 /**
+ * 平台特殊处理：对 SPA 网站调用专用 API 获取内容。
+ *
+ * 某些网站（如今日头条）是纯 JavaScript 渲染的 SPA，
+ * 服务端只返回空 HTML 壳，fetch 无法获取实际内容。
+ * 此函数针对这些平台调用专用 API 获取文章内容。
+ *
+ * @returns 成功返回 { title, content }，不匹配返回 null（走通用抓取流程）
+ */
+async function fetchUrlByPlatform(
+  url: string
+): Promise<{ title: string; content: string } | null> {
+  // 今日头条：www.toutiao.com/article/{id}/
+  // 移动端 API：https://m.toutiao.com/i{id}/info/ 返回 JSON
+  const toutiaoMatch = url.match(/toutiao\.com\/article\/(\d+)/);
+  if (toutiaoMatch) {
+    const articleId = toutiaoMatch[1];
+    return fetchToutiaoContent(articleId, url);
+  }
+
+  return null;
+}
+
+/**
+ * 抓取今日头条文章内容（通过移动端 API）。
+ *
+ * 今日头条网页版是 SPA，服务端返回空 HTML。
+ * 移动端 API `https://m.toutiao.com/i{id}/info/` 返回 JSON，
+ * 包含 `data.title` 和 `data.content`（HTML 格式）。
+ */
+async function fetchToutiaoContent(
+  articleId: string,
+  originalUrl: string
+): Promise<{ title: string; content: string }> {
+  const apiUrl = `https://m.toutiao.com/i${articleId}/info/`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const res = await fetch(apiUrl, {
+      signal: controller.signal,
+      headers: {
+        // 使用移动端 UA，部分接口仅响应移动端请求
+        "User-Agent":
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        Accept: "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        Referer: originalUrl,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`今日头条 API 返回 HTTP ${res.status}`);
+    }
+
+    const json = await res.json();
+    const title = json?.data?.title || "今日头条文章";
+    const htmlContent = json?.data?.content || "";
+
+    if (!htmlContent) {
+      throw new Error("今日头条 API 返回的内容为空");
+    }
+
+    // 将 HTML 内容转为纯文本
+    const content = htmlContent
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<\/(p|div|section|article|h[1-6]|li|br)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    if (!content || content.length < 10) {
+      throw new Error("今日头条文章内容提取失败");
+    }
+
+    return { title, content };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("抓取今日头条文章超时（15 秒）");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * 抓取 URL 内容并提取正文。
  *
  * 基础实现：fetch HTML → 去除 script/style/nav → 提取文本。
@@ -428,6 +523,12 @@ async function prepareContent(
 async function fetchUrlContent(
   url: string
 ): Promise<{ title: string; content: string }> {
+  // 平台特殊处理：某些网站是 SPA，服务端返回空 HTML，需要调用专用 API
+  const platformResult = await fetchUrlByPlatform(url);
+  if (platformResult) {
+    return platformResult;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
 
