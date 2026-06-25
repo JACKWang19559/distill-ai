@@ -72,6 +72,41 @@ def _check_dependencies() -> None:
     # 检查 ffmpeg
     if shutil.which("ffmpeg"):
         logger.info("ffmpeg 已安装")
+        # 检查 ffmpeg 版本和 libmp3lame 编码器支持
+        try:
+            import subprocess
+
+            # ffmpeg 版本
+            version_result = subprocess.run(
+                ["ffmpeg", "-version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if version_result.returncode == 0:
+                first_line = version_result.stdout.split("\n")[0]
+                logger.info("ffmpeg 版本: %s", first_line)
+
+            # 检查 libmp3lame 编码器（音频提取必需）
+            encoders_result = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-encoders"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if encoders_result.returncode == 0:
+                has_mp3lame = "libmp3lame" in encoders_result.stdout
+                if has_mp3lame:
+                    logger.info("ffmpeg 支持 libmp3lame 编码器（MP3 输出可用）")
+                else:
+                    logger.error(
+                        "ffmpeg 不支持 libmp3lame 编码器！音频提取将失败。"
+                        "请在 Dockerfile 中安装带 libmp3lame 的 ffmpeg。"
+                    )
+            else:
+                logger.warning("无法获取 ffmpeg 编码器列表")
+        except Exception as e:
+            logger.warning("检查 ffmpeg 编码器支持时出错: %s", e)
     else:
         logger.warning("ffmpeg 未安装，音频分离功能不可用")
 
